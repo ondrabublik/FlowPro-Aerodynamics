@@ -31,7 +31,7 @@ public abstract class Aerodynamics implements Equation {
     protected double rhoRef;
     protected double velocityRef;
     protected double tRef;  // nepouziva se !!!???
-
+    
     // inlet boundary condition
     protected boolean isInletSupersonic;
     // subsonic inlet boundary condition 

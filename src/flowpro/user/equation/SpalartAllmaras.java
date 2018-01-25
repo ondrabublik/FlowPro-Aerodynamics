@@ -124,18 +124,26 @@ public class SpalartAllmaras extends Aerodynamics {
             double VIn = machIn * Math.sqrt((kapa * pOut) / rhoIn);
 
             double[] vIn = new double[dim];
+            double alpha = 0;
+            double beta = 0;
+            if (attackAngle != null) {
+                alpha = attackAngle[0];
+                if (dim == 3) {
+                    beta = attackAngle[1];
+                }
+            }
             switch (dim) {
                 case 1:
                     vIn[0] = VIn;
                     break;
                 case 2:
-                    vIn[0] = VIn * Math.cos(attackAngle[0]);
-                    vIn[1] = VIn * Math.sin(attackAngle[0]);
+                    vIn[0] = VIn * Math.cos(alpha);
+                    vIn[1] = VIn * Math.sin(alpha);
                     break;
                 case 3:
-                    vIn[0] = VIn * Math.cos(attackAngle[0]) * Math.cos(attackAngle[1]);
-                    vIn[1] = VIn * Math.sin(attackAngle[0]) * Math.cos(attackAngle[1]);
-                    vIn[2] = VIn * Math.sin(attackAngle[1]);
+                    vIn[0] = VIn * Math.cos(alpha) * Math.cos(beta);
+                    vIn[1] = VIn * Math.sin(alpha) * Math.cos(beta);
+                    vIn[2] = VIn * Math.sin(beta);
             }
 
             double[] W = new double[nEqs];
@@ -145,6 +153,7 @@ public class SpalartAllmaras extends Aerodynamics {
             }
             W[dim + 1] = pOut / (kapa - 1) + 0.5 * rhoIn * VIn * VIn;
             W[dim + 2] = rhoIn * vtIn;
+            
             return W;
         }
     }
