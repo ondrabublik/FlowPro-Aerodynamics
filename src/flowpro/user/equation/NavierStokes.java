@@ -322,7 +322,7 @@ public class NavierStokes extends Aerodynamics {
             }
             flux[dim + 1] += (tmp + constant * pOverRhoDer[d]) * n[d] / Re;
         }
-
+        
         return flux;
     }
 
@@ -386,7 +386,7 @@ public class NavierStokes extends Aerodynamics {
                 }
 
             case "zVelocity":
-                if (dim > 3) {
+                if (dim > 2) {
                     return new double[]{velocityRef * W[3] / W[0]};
                 } else {
                     throw new UnsupportedOperationException("undefined value" + name);
@@ -400,7 +400,11 @@ public class NavierStokes extends Aerodynamics {
                 return velocity;
 
             case "temperature":
-                throw new UnsupportedOperationException("undefined value" + name);
+                double velocity2 = 0;
+                for (int i = 0; i < dim; i++) {
+                    velocity2 += (W[i + 1] / W[0])*(W[i + 1] / W[0]);
+                }
+                return new double[]{velocityRef * velocityRef * (W[dim + 1]/W[0] - velocity2/2) / cv};
 
             case "energy":
                 return new double[]{pRef * W[dim + 1]};

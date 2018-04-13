@@ -31,6 +31,7 @@ public abstract class Aerodynamics implements Equation {
     protected double rhoRef;
     protected double velocityRef;
     protected double tRef;  // nepouziva se !!!???
+    double cp, cv;
     
     // inlet boundary condition
     protected boolean isInletSupersonic;
@@ -74,7 +75,6 @@ public abstract class Aerodynamics implements Equation {
         this.isDiffusive = isDiffusive;
         
         // heat capacity ratio
-        double cp, cv;
         if (props.containsKey("kappa") && props.containsKey("cv") && !props.containsKey("cp")) {
             kapa = props.getDouble("kappa");
             cv = props.getDouble("cv");

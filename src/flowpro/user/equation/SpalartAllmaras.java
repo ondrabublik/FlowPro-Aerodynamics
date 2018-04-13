@@ -110,11 +110,6 @@ public class SpalartAllmaras extends Aerodynamics {
     }
 
     @Override
-    public double[] getReferenceValues() {
-        return new double[]{lRef, pRef, rhoRef, velocityRef, tRef};
-    }
-
-    @Override
     public double[] constInitCondition() {
         if (isInletSupersonic) {
             return WIn;
@@ -496,7 +491,11 @@ public class SpalartAllmaras extends Aerodynamics {
                 return velocity;
 
             case "temperature":
-                throw new UnsupportedOperationException("undefined value" + name);
+                double velocity2 = 0;
+                for (int i = 0; i < dim; i++) {
+                    velocity2 += (W[i + 1] / W[0])*(W[i + 1] / W[0]);
+                }
+                return new double[]{velocityRef * velocityRef * (W[dim + 1]/W[0] - velocity2/2) / cv};
 
             case "energy":
                 return new double[]{pRef * W[dim + 1]};
