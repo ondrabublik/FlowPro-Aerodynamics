@@ -1,5 +1,6 @@
 package flowpro.user.equation;
 
+import flowpro.api.ElementData;
 import flowpro.api.Equation;
 import flowpro.api.FlowProProperties;
 import java.io.FileOutputStream;
@@ -230,7 +231,7 @@ public abstract class Aerodynamics implements Equation {
     }
     
     @Override
-    public double maxEigenvalue(double[] W) {
+    public double maxEigenvalue(double[] W, ElementData elem) {
         W[0] = limiteRho(W[0]);
         double p = pressure(W);
         double a = Math.sqrt(kapa * p / W[0]);

@@ -177,7 +177,7 @@ public class KOmega extends Aerodynamics {
             default: // interior edge
                 double[] fL = convectiveFlux(WL, Vs, n, elem);
                 double[] fR = convectiveFlux(WR, Vs, n, elem);
-                double maxEigenValue = Math.max(maxEigenvalue(WL), maxEigenvalue(WR));
+                double maxEigenValue = Math.max(maxEigenvalue(WL, elem), maxEigenvalue(WR, elem));
                 for (int j = 0; j < nEqs; j++) {
                     f[j] = (fL[j] + fR[j] - maxEigenValue * (WR[j] - WL[j])) / 2;
                 }
