@@ -1,2 +1,2 @@
 # FlowPro-Aerodynamics
-Basic aerodynamics models
+This package implements basic mathematical models used in CFD.
