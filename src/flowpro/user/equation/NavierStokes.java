@@ -118,7 +118,7 @@ public class NavierStokes extends Aerodynamics {
     }
 
     @Override
-    public double[] numericalConvectiveFlux(double WL[], double WR[], double Vs, double[] n, int TT, ElementData elem) {
+    public double[] numericalConvectiveFlux(double WL[], double WR[], double[] n, int TT, ElementData elem) {
         WL[0] = limiteRho(WL[0]);
         WR[0] = limiteRho(WR[0]);
 
@@ -129,15 +129,21 @@ public class NavierStokes extends Aerodynamics {
             case (BoundaryType.INVISCID_WALL):
                 double p = pressure(WL);
                 f[0] = 0;
+                double V = .0;
                 for (int d = 0; d < dim; ++d) {
                     f[d + 1] = p * n[d];
+                    V += elem.meshVelocity[d] * n[d];
                 }
-                f[dim + 1] = p * Vs;
+                f[dim + 1] = p * V;
+
+                for (int j = 0; j < nEqs; j++) {
+                    f[j] += V*WL[j];
+                }
                 break;
 
             case (BoundaryType.INLET):
             case (BoundaryType.OUTLET):
-                f = convectiveFlux(WR, Vs, n, elem);
+                f = convectiveFlux(WR, n, elem);
                 break;
 
             default: // interior edge
@@ -146,12 +152,12 @@ public class NavierStokes extends Aerodynamics {
                         double[] fp = fplus(WL, pressure(WL), n);
                         double[] fm = fminus(WR, pressure(WR), n);
                         for (int j = 0; j < nEqs; j++) {
-                            f[j] = fp[j] + fm[j] - Vs * (WL[j] + WR[j]) / 2;
+                            f[j] = fp[j] + fm[j];
                         }
                         break;
                     default:
-                        double[] fL = convectiveFlux(WL, Vs, n, elem);
-                        double[] fR = convectiveFlux(WR, Vs, n, elem);
+                        double[] fL = convectiveFlux(WL, n, elem);
+                        double[] fR = convectiveFlux(WR, n, elem);
                         double maxEigenValue = Math.max(maxEigenvalue(WL, elem), maxEigenvalue(WR, elem));
                         for (int j = 0; j < nEqs; j++) {
                             f[j] = (fL[j] + fR[j] - maxEigenValue * (WR[j] - WL[j])) / 2;
@@ -163,7 +169,7 @@ public class NavierStokes extends Aerodynamics {
     }
 
     @Override
-    public double[] convectiveFlux(double[] W, double Vs, double[] n, ElementData elem) {
+    public double[] convectiveFlux(double[] W, double[] n, ElementData elem) {
         W[0] = limiteRho(W[0]);
 
         double[] f = new double[nEqs];
@@ -175,17 +181,17 @@ public class NavierStokes extends Aerodynamics {
         V /= W[0];
 
         double p = pressure(W);
-        f[0] = W[0] * (V - Vs);
+        f[0] = W[0] * V;
         for (int d = 0; d < dim; ++d) {
-            f[d + 1] = W[d + 1] * (V - Vs) + p * n[d];
+            f[d + 1] = W[d + 1] * V + p * n[d];
         }
-        f[dim + 1] = (W[dim + 1] + p) * V - W[dim + 1] * Vs;
+        f[dim + 1] = (W[dim + 1] + p) * V;
 
         return f;
     }
 
     @Override
-    public double[] boundaryValue(double[] WL, double[] u, double[] n, int TT, ElementData elem) {
+    public double[] boundaryValue(double[] WL, double[] n, int TT, ElementData elem) {
         WL[0] = limiteRho(WL[0]);
         double[] WR = new double[nEqs];
         double p = pressure(WL);
@@ -193,6 +199,7 @@ public class NavierStokes extends Aerodynamics {
         switch (TT) {
             case (BoundaryType.WALL):
                 if (isDiffusive) {
+                    double[] u = elem.meshVelocity;
                     double absVelocity2 = .0;
                     for (int d = 0; d < dim; ++d) {
                         absVelocity2 += u[d] * u[d];
@@ -207,6 +214,13 @@ public class NavierStokes extends Aerodynamics {
                 }
             case (BoundaryType.INVISCID_WALL):
                 WR = Arrays.copyOf(WL, nEqs);
+                double nu = 0;
+                for (int d = 0; d < dim; ++d) {
+                    nu += WL[d + 1] * n[d];
+                }
+                for (int d = 0; d < dim; ++d) { //tangent to wall
+                    WR[d + 1] = WL[d + 1] + n[d] * nu;
+                }
                 break;
 
             case (BoundaryType.INLET):
@@ -322,7 +336,7 @@ public class NavierStokes extends Aerodynamics {
             }
             flux[dim + 1] += (tmp + constant * pOverRhoDer[d]) * n[d] / Re;
         }
-        
+
         return flux;
     }
 
@@ -402,9 +416,9 @@ public class NavierStokes extends Aerodynamics {
             case "temperature":
                 double velocity2 = 0;
                 for (int i = 0; i < dim; i++) {
-                    velocity2 += (W[i + 1] / W[0])*(W[i + 1] / W[0]);
+                    velocity2 += (W[i + 1] / W[0]) * (W[i + 1] / W[0]);
                 }
-                return new double[]{velocityRef * velocityRef * (W[dim + 1]/W[0] - velocity2/2) / cv};
+                return new double[]{velocityRef * velocityRef * (W[dim + 1] / W[0] - velocity2 / 2) / cv};
 
             case "energy":
                 return new double[]{pRef * W[dim + 1]};
@@ -479,5 +493,108 @@ public class NavierStokes extends Aerodynamics {
             }
         }
         return f;
+    }
+
+    @Override
+    public boolean isEquationsJacobian() {
+        return true;
+    }
+
+    @Override
+    public double[] convectiveFluxJacobian(double[] W, double[] n, ElementData elemData) {
+        double[] a = new double[nEqs * nEqs];
+        double r = W[0];
+        double u = W[1] / r;
+        double v = W[2] / r;
+        double E = W[3];
+        double q = u * u + v * v;
+        double p = (kapa - 1) * (E - r * q / 2);
+        double nx = n[0];
+        double ny = n[1];
+        double Vn = u * nx + v * ny;
+
+        a[0] = 0;
+        a[1] = nx;
+        a[2] = ny;
+        a[3] = 0;
+        a[4] = -u * Vn + 0.5 * (kapa - 1) * q * nx;
+        a[5] = u * nx + Vn - (kapa - 1) * u * nx;
+        a[6] = u * ny - (kapa - 1) * v * nx;
+        a[7] = (kapa - 1) * nx;
+        a[8] = -v * Vn + 0.5 * (kapa - 1) * q * ny;
+        a[9] = v * nx - (kapa - 1) * u * ny;
+        a[10] = v * ny + Vn - (kapa - 1) * v * ny;
+        a[11] = (kapa - 1) * ny;
+        a[12] = -1 / r * Vn * (E + p) + 0.5 * Vn * (kapa - 1) * q;
+        a[13] = 1 / r * nx * (E + p) - u * Vn * (kapa - 1);
+        a[14] = 1 / r * ny * (E + p) - v * Vn * (kapa - 1);
+        a[15] = Vn * kapa;
+        return a;
+    }
+
+    @Override
+    public double[] boundaryConvectiveFluxJacobian(double[] WL, double[] WR, double[] n, int boundaryType, ElementData elemData) {
+        switch (boundaryType) {
+            case (BoundaryType.WALL):
+            case (BoundaryType.INVISCID_WALL):
+                double[] a = new double[nEqs * nEqs];
+                double r = WL[0];
+                double u = WL[1] / r;
+                double v = WL[2] / r;
+                double q = u * u + v * v;
+                double nx = n[0];
+                double ny = n[1];
+
+                a[4] = 0.5 * (kapa - 1) * q * nx;
+                a[5] = -(kapa - 1) * u * nx;
+                a[6] = -(kapa - 1) * v * nx;
+                a[7] = (kapa - 1) * nx;
+                a[8] = 0.5 * (kapa - 1) * q * ny;
+                a[9] = -(kapa - 1) * u * ny;
+                a[10] = -(kapa - 1) * v * ny;
+                a[11] = (kapa - 1) * ny;
+
+                return a;
+            default:
+                return null;
+        }
+    }
+
+    @Override
+    public double[] diffusiveFluxJacobian(double[] W, double[] dW, double n[], ElementData elemData) {
+        double[] a = new double[nEqs * nEqs * 3];
+//        a[12] = (8 * dW[0] * n[0] * W[1] - 4 * dW[1] * n[0] * W[0] + 6 * dW[0] * n[1] * W[2] - 4 * dW[nEqs] * n[0] * W[2] + 6 * dW[nEqs] * n[1] * W[1] - 3 * dW[nEqs + 1] * n[1] * W[0] - 3 * dW[2] * n[1] * W[0] + 2 * dW[nEqs + 2] * n[0] * W[0]) / (3 * Re * W[0] * W[0] * W[0]);
+//        a[13] = -(4 * dW[0] * n[0] + 3 * dW[nEqs] * n[1]) / (3 * Re * (W[0] * W[0]));
+//        a[14] = -(3 * dW[0] * n[1] - 2 * dW[nEqs] * n[0]) / (3 * Re * (W[0] * W[0]));
+//        
+//        a[16] = -(4 * n[0] * W[1] + 3 * n[1] * W[2]) / (3 * Re * (W[0] * W[0]));
+//        a[17] = (4 * n[0]) / (3 * Re * W[0]);
+//        a[18] = n[1] / (Re * W[0]);
+//        a[20] = (2 * n[0] * W[2] - 3 * n[1] * W[1]) / (3 * Re * (W[0] * W[0]));
+//        a[21] = n[1] / (Re * W[0]);
+//        a[22] = -(2 * n[0]) / (3 * Re * W[0]);
+//        a[24] = (6 * dW[0] * n[0] * W[2] - 4 * dW[0] * n[1] * W[1] + 6 * dW[nEqs] * n[0] * W[1] + 2 * dW[1] * n[1] * W[0] - 3 * dW[nEqs + 1] * n[0] * W[0] - 3 * dW[2] * n[0] * W[0] + 8 * dW[nEqs] * n[1] * W[2] - 4 * dW[nEqs + 2] * n[1] * W[0]) / (3 * Re * W[0] * W[0] * W[0]);
+//        a[25] = (2 * dW[0] * n[1] - 3 * dW[nEqs] * n[0]) / (3 * Re * (W[0] * W[0]));
+//        a[26] = -(3 * dW[0] * n[0] + 4 * dW[nEqs] * n[1]) / (3 * Re * (W[0] * W[0]));
+//        a[28] = -(3 * n[0] * W[2] - 2 * n[1] * W[1]) / (3 * Re * (W[0] * W[0]));
+//        a[29] = -(2 * n[1]) / (3 * Re * W[0]);
+//        a[30] = n[0] / (Re * W[0]);
+//        a[32] = -(3 * n[0] * W[1] + 4 * n[1] * W[2]) / (3 * Re * (W[0] * W[0]));
+//        a[33] = n[0] / (Re * W[0]);
+//        a[34] = (4 * n[1]) / (3 * Re * W[0]);
+//        a[36] = (12 * Pr * dW[0] * n[0] * (W[1] * W[1]) + 9 * Pr * dW[0] * n[0] * (W[2] * W[2]) + 9 * Pr * dW[nEqs] * n[1] * (W[1] * W[1]) + 12 * Pr * dW[nEqs] * n[1] * (W[2] * W[2]) - 9 * dW[0] * kapa * n[0] * (W[1] * W[1]) - 9 * dW[0] * kapa * n[0] * (W[2] * W[2]) - 9 * dW[nEqs] * kapa * n[1] * (W[1] * W[1]) - 3 * dW[3] * kapa * n[0] * (W[0] * W[0]) - 9 * dW[nEqs] * kapa * n[1] * (W[2] * W[2]) - 3 * dW[nEqs + 3] * kapa * n[1] * (W[0] * W[0]) - 8 * Pr * dW[1] * n[0] * W[0] * W[1] + 3 * Pr * dW[0] * n[1] * W[1] * W[2] + 3 * Pr * dW[nEqs] * n[0] * W[1] * W[2] + 4 * Pr * dW[1] * n[1] * W[0] * W[2] - 6 * Pr * dW[nEqs + 1] * n[0] * W[0] * W[2] - 6 * Pr * dW[nEqs + 1] * n[1] * W[0] * W[1] - 6 * Pr * dW[2] * n[0] * W[0] * W[2] - 6 * Pr * dW[2] * n[1] * W[0] * W[1] + 4 * Pr * dW[nEqs + 2] * n[0] * W[0] * W[1] - 8 * Pr * dW[nEqs + 2] * n[1] * W[0] * W[2] + 6 * dW[1] * kapa * n[0] * W[0] * W[1] + 6 * dW[0] * kapa * n[0] * W[0] * W[3] + 6 * dW[nEqs + 1] * kapa * n[1] * W[0] * W[1] + 6 * dW[2] * kapa * n[0] * W[0] * W[2] + 6 * dW[nEqs] * kapa * n[1] * W[0] * W[3] + 6 * dW[nEqs + 2] * kapa * n[1] * W[0] * W[2]) / (3 * Pr * Re * W[0] * W[0] * W[0] * W[0]);
+//        a[37] = -(3 * dW[1] * kapa * n[0] * W[0] - 6 * dW[0] * kapa * n[0] * W[1] - 6 * dW[nEqs] * kapa * n[1] * W[1] + 3 * dW[nEqs + 1] * kapa * n[1] * W[0] + 8 * Pr * dW[0] * n[0] * W[1] - 4 * Pr * dW[1] * n[0] * W[0] + Pr * dW[0] * n[1] * W[2] + Pr * dW[nEqs] * n[0] * W[2] + 6 * Pr * dW[nEqs] * n[1] * W[1] - 3 * Pr * dW[nEqs + 1] * n[1] * W[0] - 3 * Pr * dW[2] * n[1] * W[0] + 2 * Pr * dW[nEqs + 2] * n[0] * W[0]) / (3 * Pr * Re * W[0] * W[0] * W[0]);
+//        a[38] = -(3 * dW[2] * kapa * n[0] * W[0] - 6 * dW[0] * kapa * n[0] * W[2] - 6 * dW[nEqs] * kapa * n[1] * W[2] + 3 * dW[nEqs + 2] * kapa * n[1] * W[0] + 6 * Pr * dW[0] * n[0] * W[2] + Pr * dW[0] * n[1] * W[1] + Pr * dW[nEqs] * n[0] * W[1] + 2 * Pr * dW[1] * n[1] * W[0] - 3 * Pr * dW[nEqs + 1] * n[0] * W[0] - 3 * Pr * dW[2] * n[0] * W[0] + 8 * Pr * dW[nEqs] * n[1] * W[2] - 4 * Pr * dW[nEqs + 2] * n[1] * W[0]) / (3 * Pr * Re * W[0] * W[0] * W[0]);
+//        a[39] = -(kapa * (dW[0] * n[0] + dW[nEqs] * n[1])) / (Pr * Re * (W[0] * W[0]));
+//        a[40] = -(4 * Pr * n[0] * (W[1] * W[1]) - 3 * kapa * n[0] * (W[2] * W[2]) - 3 * kapa * n[0] * (W[1] * W[1]) + 3 * Pr * n[0] * (W[2] * W[2]) + Pr * n[1] * W[1] * W[2] + 3 * kapa * n[0] * W[0] * W[3]) / (3 * Pr * Re * W[0] * W[0] * W[0]);
+//        a[41] = -(2 * Pr * n[1] * W[2] - 4 * Pr * n[0] * W[1] + 3 * kapa * n[0] * W[1]) / (3 * Pr * Re * (W[0] * W[0]));
+//        a[42] = (Pr * n[0] * W[2] + Pr * n[1] * W[1] - kapa * n[0] * W[2]) / (Pr * Re * (W[0] * W[0]));
+//        a[43] = (kapa * n[0]) / (Pr * Re * W[0]);
+//        a[44] = -(3 * Pr * n[1] * (W[1] * W[1]) - 3 * kapa * n[1] * (W[2] * W[2]) - 3 * kapa * n[1] * (W[1] * W[1]) + 4 * Pr * n[1] * (W[2] * W[2]) + Pr * n[0] * W[1] * W[2] + 3 * kapa * n[1] * W[0] * W[3]) / (3 * Pr * Re * W[0] * W[0] * W[0]);
+//        a[45] = (Pr * n[0] * W[2] + Pr * n[1] * W[1] - kapa * n[1] * W[1]) / (Pr * Re * (W[0] * W[0]));
+//        a[46] = -(2 * Pr * n[0] * W[1] - 4 * Pr * n[1] * W[2] + 3 * kapa * n[1] * W[2]) / (3 * Pr * Re * (W[0] * W[0]));
+//        a[47] = (kapa * n[1]) / (Pr * Re * W[0]);
+
+        return a;
     }
 }

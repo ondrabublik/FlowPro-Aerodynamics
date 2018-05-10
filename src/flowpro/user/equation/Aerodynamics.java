@@ -70,6 +70,31 @@ public abstract class Aerodynamics implements Equation {
         return isDiffusive;
     }
     
+    @Override
+    public boolean isEquationsJacobian(){
+        return false;
+    }
+    
+    @Override
+    public double[] convectiveFluxJacobian(double[] W, double[] n, ElementData elemData){
+        throw new UnsupportedOperationException("operation not supported");
+    }
+    
+    @Override
+    public double[] boundaryConvectiveFluxJacobian(double[] WL, double[] WR, double[] n, int boundaryType, ElementData elemData){
+        throw new UnsupportedOperationException("operation not supported");
+    }
+    
+    @Override
+    public double[] diffusiveFluxJacobian(double[] W, double[] dW, double n[], ElementData elemData){
+        throw new UnsupportedOperationException("operation not supported");
+    }
+    
+    @Override
+    public double[] sourceTermJacobian(double[] W, double[] dW, ElementData elemData){
+        throw new UnsupportedOperationException("operation not supported");
+    }
+    
     public void init(FlowProProperties props, int dim, int nEqs, boolean isDiffusive) throws IOException {
         this.nEqs = nEqs;
         this.dim = dim;

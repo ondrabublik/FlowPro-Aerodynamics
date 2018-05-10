@@ -30,7 +30,7 @@ public class SpalartAllmarasVelocityInlet extends SpalartAllmaras{
     }
     
     @Override
-    public double[] boundaryValue(double[] WL, double[] u, double[] n, int TT, ElementData elem) {
+    public double[] boundaryValue(double[] WL, double[] n, int TT, ElementData elem) {
         WL[0] = limiteRho(WL[0]);
         double[] WR = new double[nEqs];
         double p = pressure(WL);
@@ -38,6 +38,7 @@ public class SpalartAllmarasVelocityInlet extends SpalartAllmaras{
         switch (TT) {
             case (BoundaryType.WALL):
                 if (isDiffusive) {
+                    double[] u = elem.meshVelocity;
                     double absVelocity2 = .0;
                     for (int d = 0; d < dim; ++d) {
                         absVelocity2 += u[d] * u[d];

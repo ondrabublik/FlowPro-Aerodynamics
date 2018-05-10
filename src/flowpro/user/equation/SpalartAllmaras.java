@@ -154,7 +154,7 @@ public class SpalartAllmaras extends Aerodynamics {
     }
 
     @Override
-    public double[] numericalConvectiveFlux(double WL[], double WR[], double Vs, double[] n, int TT, ElementData elem) {
+    public double[] numericalConvectiveFlux(double WL[], double WR[], double[] n, int TT, ElementData elem) {
         WL[0] = limiteRho(WL[0]);
         WR[0] = limiteRho(WR[0]);
 
@@ -165,21 +165,26 @@ public class SpalartAllmaras extends Aerodynamics {
             case (BoundaryType.INVISCID_WALL):
                 double p = pressure(WL);
                 f[0] = 0;
+                double V = .0;
                 for (int d = 0; d < dim; ++d) {
                     f[d + 1] = p * n[d];
+                    V += elem.meshVelocity[d] * n[d];
                 }
-                f[dim + 1] = p * Vs;
-                f[dim + 2] = 0;
+                f[dim + 1] = p * V;
+                
+                for (int j = 0; j < nEqs; j++) {
+                    f[j] += V*WL[j];
+                }
                 break;
 
             case (BoundaryType.INLET):
             case (BoundaryType.OUTLET):
-                f = convectiveFlux(WR, Vs, n, elem);
+                f = convectiveFlux(WR, n, elem);
                 break;
 
             default: // interior edge
-                double[] fL = convectiveFlux(WL, Vs, n, elem);
-                double[] fR = convectiveFlux(WR, Vs, n, elem);
+                double[] fL = convectiveFlux(WL, n, elem);
+                double[] fR = convectiveFlux(WR, n, elem);
                 double maxEigenValue = Math.max(maxEigenvalue(WL, elem), maxEigenvalue(WR, elem));
                 for (int j = 0; j < nEqs; j++) {
                     f[j] = (fL[j] + fR[j] - maxEigenValue * (WR[j] - WL[j])) / 2;
@@ -190,7 +195,7 @@ public class SpalartAllmaras extends Aerodynamics {
     }
 
     @Override
-    public double[] convectiveFlux(double[] W, double Vs, double[] n, ElementData elem) {
+    public double[] convectiveFlux(double[] W, double[] n, ElementData elem) {
         W[0] = limiteRho(W[0]);
 
         double[] f = new double[nEqs];
@@ -202,17 +207,17 @@ public class SpalartAllmaras extends Aerodynamics {
         V /= W[0];
 
         double p = pressure(W);
-        f[0] = W[0] * (V - Vs);
+        f[0] = W[0] * V;
         for (int d = 0; d < dim; ++d) {
-            f[d + 1] = W[d + 1] * (V - Vs) + p * n[d];
+            f[d + 1] = W[d + 1] * V + p * n[d];
         }
-        f[dim + 1] = (W[dim + 1] + p) * V - W[dim + 1] * Vs;
-        f[dim + 2] = W[dim + 2] * (V - Vs);
+        f[dim + 1] = (W[dim + 1] + p) * V;
+        f[dim + 2] = W[dim + 2] * V;
         return f;
     }
 
     @Override
-    public double[] boundaryValue(double[] WL, double[] u, double[] n, int TT, ElementData elem) {
+    public double[] boundaryValue(double[] WL, double[] n, int TT, ElementData elem) {
         WL[0] = limiteRho(WL[0]);
         double[] WR = new double[nEqs];
         double p = pressure(WL);
@@ -220,6 +225,7 @@ public class SpalartAllmaras extends Aerodynamics {
         switch (TT) {
             case (BoundaryType.WALL):
                 if (isDiffusive) {
+                    double[] u = elem.meshVelocity;
                     double absVelocity2 = .0;
                     for (int d = 0; d < dim; ++d) {
                         absVelocity2 += u[d] * u[d];
