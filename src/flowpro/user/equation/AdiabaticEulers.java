@@ -143,7 +143,7 @@ public class AdiabaticEulers extends Aerodynamics {
         switch (TT) {
             case (BoundaryType.WALL):
             case (BoundaryType.INVISCID_WALL):
-                double p = pressure(WL);
+                double p = pressure(WR);
                 f[0] = 0;
                 double V = .0;
                 for (int d = 0; d < dim; ++d) {
@@ -152,7 +152,7 @@ public class AdiabaticEulers extends Aerodynamics {
                 }
                 
                 for (int j = 0; j < nEqs; j++) {
-                    f[j] += V*WL[j];
+                    f[j] += V*WR[j];
                 }
                 break;
 

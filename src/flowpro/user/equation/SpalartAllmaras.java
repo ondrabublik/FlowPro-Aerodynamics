@@ -163,7 +163,7 @@ public class SpalartAllmaras extends Aerodynamics {
         switch (TT) {
             case (BoundaryType.WALL):
             case (BoundaryType.INVISCID_WALL):
-                double p = pressure(WL);
+                double p = pressure(WR);
                 f[0] = 0;
                 double V = .0;
                 for (int d = 0; d < dim; ++d) {
@@ -173,7 +173,7 @@ public class SpalartAllmaras extends Aerodynamics {
                 f[dim + 1] = p * V;
                 
                 for (int j = 0; j < nEqs; j++) {
-                    f[j] += V*WL[j];
+                    f[j] += V*WR[j];
                 }
                 break;
 

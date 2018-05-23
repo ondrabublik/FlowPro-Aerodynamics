@@ -81,11 +81,6 @@ public abstract class Aerodynamics implements Equation {
     }
     
     @Override
-    public double[] boundaryConvectiveFluxJacobian(double[] WL, double[] WR, double[] n, int boundaryType, ElementData elemData){
-        throw new UnsupportedOperationException("operation not supported");
-    }
-    
-    @Override
     public double[] diffusiveFluxJacobian(double[] W, double[] dW, double n[], ElementData elemData){
         throw new UnsupportedOperationException("operation not supported");
     }
