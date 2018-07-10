@@ -2,6 +2,7 @@ package flowpro.user.equation;
 
 import flowpro.api.ElementData;
 import flowpro.api.FlowProProperties;
+import static flowpro.user.equation.Aerodynamics.RHO_TOL;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
@@ -10,7 +11,7 @@ import java.util.Arrays;
  *
  * @author ales
  */
-public class NavierStokes extends Aerodynamics {
+public class NavierStokesR extends Aerodynamics {
 
     protected static final double P_TOL = 1e-1;
 
@@ -125,8 +126,8 @@ public class NavierStokes extends Aerodynamics {
         double[] f = new double[nEqs];
 
         switch (TT) {
-            case (BoundaryType.WALL):
-            case (BoundaryType.INVISCID_WALL):
+            case (Aerodynamics.BoundaryType.WALL):
+            case (Aerodynamics.BoundaryType.INVISCID_WALL):
                 double p = pressure(WR);
                 f[0] = 0;
                 double V = .0;
@@ -142,8 +143,9 @@ public class NavierStokes extends Aerodynamics {
                 }
                 break;
 
-            case (BoundaryType.INLET):
-            case (BoundaryType.OUTLET):
+            case (Aerodynamics.BoundaryType.INLET):
+            case (Aerodynamics.BoundaryType.OUTLET):
+            case (Aerodynamics.BoundaryType.FREE_INLET_OUTLET):
                 f = convectiveFlux(WR, n, elem);
                 break;
 
@@ -198,7 +200,7 @@ public class NavierStokes extends Aerodynamics {
         double p = pressure(WL);
 
         switch (TT) {
-            case (BoundaryType.WALL):
+            case (Aerodynamics.BoundaryType.WALL):
                 if (isDiffusive) {
                     double[] u = elem.meshVelocity;
                     double absVelocity2 = .0;
@@ -213,7 +215,7 @@ public class NavierStokes extends Aerodynamics {
                     WR[dim + 1] = p / (kapa - 1) + WR[0] * absVelocity2 / 2;
                     break;
                 }
-            case (BoundaryType.INVISCID_WALL):
+            case (Aerodynamics.BoundaryType.INVISCID_WALL):
                 WR = Arrays.copyOf(WL, nEqs);
                 double nu = 0;
                 for (int d = 0; d < dim; ++d) {
@@ -224,7 +226,7 @@ public class NavierStokes extends Aerodynamics {
                 }
                 break;
 
-            case (BoundaryType.INLET):
+            case (Aerodynamics.BoundaryType.INLET):
                 if (!isInletSupersonic) { // subsonic inlet
                     double mach;
                     if (p > pIn0) {
@@ -258,7 +260,7 @@ public class NavierStokes extends Aerodynamics {
                 }
                 break;
 
-            case (BoundaryType.OUTLET):
+            case (Aerodynamics.BoundaryType.OUTLET):
                 double rhoOut = WL[0];
                 double absVelocity2 = .0;
                 for (int d = 0; d < dim; ++d) {
@@ -278,6 +280,25 @@ public class NavierStokes extends Aerodynamics {
                 } else {  // supersonic outlet
                     WR = Arrays.copyOf(WL, nEqs);
                 }
+
+            case (Aerodynamics.BoundaryType.FREE_INLET_OUTLET):
+                WR = Arrays.copyOf(WL, nEqs);
+                double[] u = elem.meshVelocity;
+                double Vn = 0;
+                for (int d = 0; d < dim; ++d) {
+                    Vn += (u[d]-WL[d+1]/WL[0]) * n[d];
+                }
+                if (Vn > 0) {
+                    WR[0] = rhoIn0;
+                    for (int d = 0; d < dim; ++d) {
+                        WR[d + 1] = 0;
+                    }
+                }
+                break;
+
+            default:
+                WR = Arrays.copyOf(WL, nEqs);
+                break;
         }
         return WR;
     }
@@ -329,7 +350,6 @@ public class NavierStokes extends Aerodynamics {
 
         double constant = kapa / (kapa - 1) / Pr;
         double[] flux = new double[nEqs];
-        flux[0] = 0;
         for (int d = 0; d < dim; ++d) {
             double tmp = .0;
             for (int f = 0; f < dim; ++f) {
@@ -338,41 +358,8 @@ public class NavierStokes extends Aerodynamics {
             }
             flux[dim + 1] += (tmp + constant * pOverRhoDer[d]) * n[d] / Re;
         }
+
         return flux;
-        
-//        int nr = nEqs;
-//        double[] fvn = new double[nr];
-//        double r = W[0];
-//        double u = W[1] / r;
-//        double v = W[2] / r;
-//        double rx = dW[0];
-//        double ry = dW[nr];
-//        double ux = 1 / r * (dW[1] - rx * u);
-//        double uy = 1 / r * (dW[nr + 1] - ry * u);
-//        double vx = 1 / r * (dW[2] - rx * v);
-//        double vy = 1 / r * (dW[nr + 2] - ry * v);
-//        double Ex = dW[3];
-//        double Ey = dW[nr + 3];
-//        p = pressure(W);
-//        double px = (kapa - 1) * (Ex - 0.5 * rx * (u * u + v * v) - r * (u * ux + v * vx));
-//        double py = (kapa - 1) * (Ey - 0.5 * ry * (u * u + v * v) - r * (u * uy + v * vy));
-//        double prx = (r * px - p * rx) / (r * r);
-//        double pry = (r * py - p * ry) / (r * r);
-//
-//        double Sxx = ux - 1.0 / 3 * (ux + vy);
-//        double Sxy = 0.5 * (vx + uy);
-//        double Syy = vy - 1.0 / 3 * (ux + vy);
-//
-//        double txx = 2 * Sxx;
-//        double txy = 2 * Sxy;
-//        double tyy = 2 * Syy;
-//
-//        fvn[0] = 0;
-//        fvn[1] = 1 / Re * txx * n[0] + 1 / Re * txy * n[1];
-//        fvn[2] = 1 / Re * txy * n[0] + 1 / Re * tyy * n[1];
-//        fvn[3] = (1 / Re * (u * txx + v * txy + kapa / (kapa - 1) / Pr * prx)) * n[0] + (1 / Re * (u * txy + v * tyy + kapa / (kapa - 1) / Pr * pry)) * n[1];
-//        
-//        return fvn;
     }
 
     @Override
@@ -389,7 +376,7 @@ public class NavierStokes extends Aerodynamics {
         }
 
         if (TT < 0) {
-            if (TT == BoundaryType.WALL) {
+            if (TT == Aerodynamics.BoundaryType.WALL) {
                 flux[dim + 1] = .0;
             } else {
                 Arrays.fill(flux, .0);
@@ -622,3 +609,4 @@ public class NavierStokes extends Aerodynamics {
         return a;
     }
 }
+

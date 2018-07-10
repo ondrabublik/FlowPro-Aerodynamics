@@ -13,6 +13,7 @@ public abstract class Aerodynamics implements Equation {
         static final int INLET = -2;
         static final int OUTLET = -3;
         static final int INVISCID_WALL = -4;
+        static final int FREE_INLET_OUTLET = -5;
     }
 
     // tolerance pro hodnotu hustoty a tlaku

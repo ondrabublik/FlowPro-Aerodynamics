@@ -172,6 +172,7 @@ public class SpalartAllmaras extends Aerodynamics {
                 }
                 f[dim + 1] = p * V;
                 
+                // for ALE
                 for (int j = 0; j < nEqs; j++) {
                     f[j] += V*WR[j];
                 }
@@ -241,6 +242,13 @@ public class SpalartAllmaras extends Aerodynamics {
                 }
             case (BoundaryType.INVISCID_WALL):
                 WR = Arrays.copyOf(WL, nEqs);
+                double nu = 0;
+                for (int d = 0; d < dim; ++d) {
+                    nu += WL[d + 1] * n[d];
+                }
+                for (int d = 0; d < dim; ++d) { //tangent to wall
+                    WR[d + 1] = WL[d + 1] + n[d] * nu;
+                }
                 break;
 
             case (BoundaryType.INLET):
