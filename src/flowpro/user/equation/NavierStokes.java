@@ -127,7 +127,7 @@ public class NavierStokes extends Aerodynamics {
         switch (TT) {
             case (BoundaryType.WALL):
             case (BoundaryType.INVISCID_WALL):
-                double p = pressure(WR);
+                double p = pressure(WL);
                 f[0] = 0;
                 double V = .0;
                 for (int d = 0; d < dim; ++d) {
@@ -339,40 +339,6 @@ public class NavierStokes extends Aerodynamics {
             flux[dim + 1] += (tmp + constant * pOverRhoDer[d]) * n[d] / Re;
         }
         return flux;
-        
-//        int nr = nEqs;
-//        double[] fvn = new double[nr];
-//        double r = W[0];
-//        double u = W[1] / r;
-//        double v = W[2] / r;
-//        double rx = dW[0];
-//        double ry = dW[nr];
-//        double ux = 1 / r * (dW[1] - rx * u);
-//        double uy = 1 / r * (dW[nr + 1] - ry * u);
-//        double vx = 1 / r * (dW[2] - rx * v);
-//        double vy = 1 / r * (dW[nr + 2] - ry * v);
-//        double Ex = dW[3];
-//        double Ey = dW[nr + 3];
-//        p = pressure(W);
-//        double px = (kapa - 1) * (Ex - 0.5 * rx * (u * u + v * v) - r * (u * ux + v * vx));
-//        double py = (kapa - 1) * (Ey - 0.5 * ry * (u * u + v * v) - r * (u * uy + v * vy));
-//        double prx = (r * px - p * rx) / (r * r);
-//        double pry = (r * py - p * ry) / (r * r);
-//
-//        double Sxx = ux - 1.0 / 3 * (ux + vy);
-//        double Sxy = 0.5 * (vx + uy);
-//        double Syy = vy - 1.0 / 3 * (ux + vy);
-//
-//        double txx = 2 * Sxx;
-//        double txy = 2 * Sxy;
-//        double tyy = 2 * Syy;
-//
-//        fvn[0] = 0;
-//        fvn[1] = 1 / Re * txx * n[0] + 1 / Re * txy * n[1];
-//        fvn[2] = 1 / Re * txy * n[0] + 1 / Re * tyy * n[1];
-//        fvn[3] = (1 / Re * (u * txx + v * txy + kapa / (kapa - 1) / Pr * prx)) * n[0] + (1 / Re * (u * txy + v * tyy + kapa / (kapa - 1) / Pr * pry)) * n[1];
-//        
-//        return fvn;
     }
 
     @Override
