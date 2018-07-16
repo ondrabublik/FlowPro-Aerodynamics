@@ -127,7 +127,7 @@ public class NavierStokes extends Aerodynamics {
         switch (TT) {
             case (BoundaryType.WALL):
             case (BoundaryType.INVISCID_WALL):
-                double p = pressure(WL);
+                double p = pressure(WR);
                 f[0] = 0;
                 double V = .0;
                 for (int d = 0; d < dim; ++d) {
@@ -211,8 +211,18 @@ public class NavierStokes extends Aerodynamics {
                         WR[d + 1] = WR[0] * u[d];
                     }
                     WR[dim + 1] = p / (kapa - 1) + WR[0] * absVelocity2 / 2;
-                    break;
+
+                } else {
+                    WR = Arrays.copyOf(WL, nEqs);
+                    double nu = 0;
+                    for (int d = 0; d < dim; ++d) {
+                        nu += WL[d + 1] * n[d];
+                    }
+                    for (int d = 0; d < dim; ++d) { //tangent to wall
+                        WR[d + 1] = WL[d + 1] + n[d] * nu;
+                    }
                 }
+                break;
             case (BoundaryType.INVISCID_WALL):
                 WR = Arrays.copyOf(WL, nEqs);
                 double nu = 0;

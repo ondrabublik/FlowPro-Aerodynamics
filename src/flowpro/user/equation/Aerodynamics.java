@@ -109,6 +109,7 @@ public abstract class Aerodynamics implements Equation {
             cp = props.getDouble("cp");
             cv = props.getDouble("cv");
             kapa = cp / cv;
+            System.out.println("Poisson ratio: " + kapa);
         } else {
             throw new IOException("exactly two out of the three following parameters must be defined: "
                     + "kappa, cp, cv");
@@ -234,11 +235,18 @@ public abstract class Aerodynamics implements Equation {
 
                 Pr = cp * viscosity / conductivity;
                 Re = rhoRef * velocityRef * lRef / viscosity;
+                
+                // far field Reynolds
+                double machInf = Math.sqrt(2 / (kapa - 1) * (Math.pow((1 / pOut), (kapa - 1) / kapa) - 1));
+                double rhoInf = Math.pow(1 + ((kapa - 1) / 2) * machInf * machInf, 1 / (1 - kapa));
+                double uInf = machInf * Math.sqrt((kapa * pOut) / rhoInf);
+                System.out.println("Far field Reynolds number: " + rhoInf * uInf * lRef / viscosity);
             } else {
                 throw new IOException("either the Prandtl and Reynolds numbers, "
                         + "or dynamic viscosity and thermal conductivity must be specified");
             }
-            System.out.println("Reynolds number: " + Re);
+            System.out.println("Stagnation Reynolds number: " + Re);
+            System.out.println("Prandtl number: " + Pr);
         } else {
             Re = -1;  // temporarely
             Pr = -1;
