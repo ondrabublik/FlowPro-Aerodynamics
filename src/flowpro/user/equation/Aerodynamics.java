@@ -7,8 +7,9 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 
 public abstract class Aerodynamics implements Equation {
-    
+
     protected class BoundaryType {
+
         static final int WALL = -1;
         static final int INLET = -2;
         static final int OUTLET = -3;
@@ -18,7 +19,7 @@ public abstract class Aerodynamics implements Equation {
 
     // tolerance pro hodnotu hustoty a tlaku
     protected static final double RHO_TOL = 1e-1;
-    
+
     protected int dim;
     protected int nEqs;
     protected boolean isDiffusive;
@@ -34,7 +35,7 @@ public abstract class Aerodynamics implements Equation {
     protected double velocityRef;
     protected double tRef;  // nepouziva se !!!???
     double cp, cv;
-    
+
     // inlet boundary condition
     protected boolean isInletSupersonic;
     // subsonic inlet boundary condition 
@@ -49,18 +50,17 @@ public abstract class Aerodynamics implements Equation {
 
     // numerical flux
     protected String numericalFluxType;
-    
-    
+
     @Override
     public int dim() {
         return dim;
     }
-    
+
     @Override
     public int nEqs() {
         return nEqs;
     }
-    
+
     @Override
     public boolean isConvective() {
         return true;
@@ -70,32 +70,32 @@ public abstract class Aerodynamics implements Equation {
     public boolean isDiffusive() {
         return isDiffusive;
     }
-    
+
     @Override
-    public boolean isEquationsJacobian(){
+    public boolean isEquationsJacobian() {
         return false;
     }
-    
+
     @Override
-    public double[] convectiveFluxJacobian(double[] W, double[] n, ElementData elemData){
+    public double[] convectiveFluxJacobian(double[] W, double[] n, ElementData elemData) {
         throw new UnsupportedOperationException("operation not supported");
     }
-    
+
     @Override
-    public double[] diffusiveFluxJacobian(double[] W, double[] dW, double n[], ElementData elemData){
+    public double[] diffusiveFluxJacobian(double[] W, double[] dW, double n[], ElementData elemData) {
         throw new UnsupportedOperationException("operation not supported");
     }
-    
+
     @Override
-    public double[] sourceTermJacobian(double[] W, double[] dW, ElementData elemData){
+    public double[] sourceTermJacobian(double[] W, double[] dW, ElementData elemData) {
         throw new UnsupportedOperationException("operation not supported");
     }
-    
+
     public void init(FlowProProperties props, int dim, int nEqs, boolean isDiffusive) throws IOException {
         this.nEqs = nEqs;
         this.dim = dim;
         this.isDiffusive = isDiffusive;
-        
+
         // heat capacity ratio
         if (props.containsKey("kappa") && props.containsKey("cv") && !props.containsKey("cp")) {
             kapa = props.getDouble("kappa");
@@ -156,7 +156,7 @@ public abstract class Aerodynamics implements Equation {
 
         // inlet
         attackAngle = null;
-        if (props.containsKey("attackAngle")){
+        if (props.containsKey("attackAngle")) {
             switch (dim) {
                 case 1:
                     attackAngle = null;
@@ -164,8 +164,8 @@ public abstract class Aerodynamics implements Equation {
                 case 3:
                     String var = "attackAngle";
                     attackAngle = props.getDoubleArray(var);
-                    if (attackAngle.length != (dim-1)) {
-                        throw new IOException("variable " + var + " must be a vector of " + (dim-1)
+                    if (attackAngle.length != (dim - 1)) {
+                        throw new IOException("variable " + var + " must be a vector of " + (dim - 1)
                                 + " (= dimension - 1) entries");
                     }
                     break;
@@ -174,7 +174,7 @@ public abstract class Aerodynamics implements Equation {
                     throw new IOException("only 1, 2 or 3 dimensions are supported");
             }
         }
-        
+
         WIn = new double[nEqs];
         if (isInletSupersonic) {
             double velocityIn = props.getDouble("vIn") / velocityRef;
@@ -184,7 +184,7 @@ public abstract class Aerodynamics implements Equation {
                 case 1:
                     vIn[0] = velocityIn;
                     break;
-                    
+
                 case 2:
                     vIn[0] = velocityIn * Math.cos(attackAngle[0]);
                     vIn[1] = velocityIn * Math.sin(attackAngle[0]);
@@ -192,14 +192,14 @@ public abstract class Aerodynamics implements Equation {
             }
             double veloSqr = 0;
             for (int d = 0; d < dim; ++d) {
-                veloSqr += vIn[d]*vIn[d];
+                veloSqr += vIn[d] * vIn[d];
             }
             double EIn = 1 / (kapa - 1) + 0.5 * veloSqr;
             WIn[0] = 1;
             for (int d = 0; d < dim; ++d) {
-                WIn[d+1] = vIn[d];
+                WIn[d + 1] = vIn[d];
             }
-            if (nEqs > dim+1) {
+            if (nEqs > dim + 1) {
                 WIn[3] = EIn;
             }
         } else {
@@ -235,30 +235,29 @@ public abstract class Aerodynamics implements Equation {
 
                 Pr = cp * viscosity / conductivity;
                 Re = rhoRef * velocityRef * lRef / viscosity;
-                
-                // far field Reynolds
-                double machInf = Math.sqrt(2 / (kapa - 1) * (Math.pow((1 / pOut), (kapa - 1) / kapa) - 1));
-                double rhoInf = Math.pow(1 + ((kapa - 1) / 2) * machInf * machInf, 1 / (1 - kapa));
-                double uInf = machInf * Math.sqrt((kapa * pOut) / rhoInf);
-                System.out.println("Far field Reynolds number: " + rhoInf * uInf * lRef / viscosity);
             } else {
                 throw new IOException("either the Prandtl and Reynolds numbers, "
                         + "or dynamic viscosity and thermal conductivity must be specified");
             }
             System.out.println("Stagnation Reynolds number: " + Re);
+            // far field Reynolds
+            double machInf = Math.sqrt(2 / (kapa - 1) * (Math.pow((1 / pOut), (kapa - 1) / kapa) - 1));
+            double rhoInf = Math.pow(1 + ((kapa - 1) / 2) * machInf * machInf, 1 / (1 - kapa));
+            double uInf = machInf * Math.sqrt((kapa * pOut) / rhoInf);
+            System.out.println("Far field Reynolds number: " + rhoInf * uInf * lRef / (rhoRef * velocityRef * lRef / Re));
             System.out.println("Prandtl number: " + Pr);
         } else {
             Re = -1;  // temporarely
             Pr = -1;
         }
-        
+
         // flux type
         numericalFluxType = "default";
         if (props.containsKey("numericalFlux")) {
             numericalFluxType = props.getString("numericalFlux");
         }
     }
-    
+
     @Override
     public double maxEigenvalue(double[] W, ElementData elem) {
         W[0] = limiteRho(W[0]);
@@ -266,10 +265,10 @@ public abstract class Aerodynamics implements Equation {
         double a = Math.sqrt(kapa * p / W[0]);
         double v = .0;
         for (int d = 0; d < dim; ++d) {
-            v += W[d+1] * W[d+1];
+            v += W[d + 1] * W[d + 1];
         }
         v = Math.sqrt(v) / W[0];
-        
+
         return v + a;
     }
 
@@ -280,12 +279,12 @@ public abstract class Aerodynamics implements Equation {
             return rho;
         }
     }
-    
+
     @Override
-    public boolean isIPFace(int TT){
+    public boolean isIPFace(int TT) {
         return (TT == BoundaryType.WALL);
     }
-    
+
     @Override
     public void saveReferenceValues(String filePath) throws IOException {
         FlowProProperties output = new FlowProProperties();
@@ -303,7 +302,7 @@ public abstract class Aerodynamics implements Equation {
         output.setProperty("machInf", Double.toString(machInf));
         output.setProperty("rhoInf", Double.toString(rhoInf));
         output.setProperty("uInf", Double.toString(uInf));
-        
+
         output.store(new FileOutputStream(filePath), null);
     }
 

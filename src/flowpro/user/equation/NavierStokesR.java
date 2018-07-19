@@ -363,20 +363,12 @@ public class NavierStokesR extends Aerodynamics {
     }
 
     @Override
-    public double[] numericalDiffusiveFlux(double WL[], double WR[], double dWL[], double dWR[],
-            double[] n, int TT, ElementData elem) {
-        WL[0] = limiteRho(WL[0]);
-        WR[0] = limiteRho(WR[0]);
+    public double[] numericalDiffusiveFlux(double Wc[], double dWc[], double[] n, int TT, ElementData elem) {
+        Wc[0] = limiteRho(Wc[0]);
 
-        double[] fluxL = diffusiveFlux(WL, dWL, n, elem);
-        double[] fluxR = diffusiveFlux(WR, dWR, n, elem);
-        double[] flux = new double[nEqs];
-        for (int j = 0; j < nEqs; j++) {
-            flux[j] = (fluxL[j] + fluxR[j]) / 2;
-        }
-
+        double[] flux = diffusiveFlux(Wc, dWc, n, elem);
         if (TT < 0) {
-            if (TT == Aerodynamics.BoundaryType.WALL) {
+            if (TT == BoundaryType.WALL) {
                 flux[dim + 1] = .0;
             } else {
                 Arrays.fill(flux, .0);

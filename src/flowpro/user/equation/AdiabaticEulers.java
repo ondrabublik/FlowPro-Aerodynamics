@@ -194,7 +194,7 @@ public class AdiabaticEulers extends Aerodynamics {
     }
 
     @Override
-    public double[] numericalDiffusiveFlux(double WL[], double WR[], double dWL[], double dWR[], double[] n, int TT, ElementData elem) {
+    public double[] numericalDiffusiveFlux(double Wc[], double dWc[], double[] n, int TT, ElementData elem) {
         throw new UnsupportedOperationException("operation not supported");
     }
 
