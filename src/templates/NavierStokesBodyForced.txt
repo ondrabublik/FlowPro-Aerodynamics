@@ -1,4 +1,4 @@
-model = 'NavierStokesBodyForced'
+model = NavierStokesBodyForced
 
 dimension = 
 

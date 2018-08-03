@@ -1,4 +1,4 @@
-model = 'NavierStokesR'
+model = NavierStokesR
 
 dimension = 
 

@@ -1,4 +1,4 @@
-model = 'SpalartAllmaras'
+model = SpalartAllmaras
 
 dimension = 
 
