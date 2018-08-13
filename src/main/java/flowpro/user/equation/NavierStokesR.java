@@ -2,7 +2,6 @@ package flowpro.user.equation;
 
 import flowpro.api.ElementData;
 import flowpro.api.FlowProProperties;
-import static flowpro.user.equation.Aerodynamics.RHO_TOL;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
@@ -387,65 +386,7 @@ public class NavierStokesR extends Aerodynamics {
         throw new UnsupportedOperationException("source is not present");
     }
 
-    @Override
-    public double[] getResults(double[] W, double[] X, String name) {
-        switch (name) {
-            case "mach":
-                double absVelocity = .0;
-                for (int d = 0; d < dim; ++d) {
-                    absVelocity += W[d + 1] * W[d + 1];
-                }
-                absVelocity = Math.sqrt(absVelocity) / W[0];
-
-                double a = Math.sqrt(kapa * pressure(W) / W[0]);
-                return new double[]{absVelocity / a};
-
-            case "density":
-                return new double[]{rhoRef * W[0]};
-
-            case "xVelocity":
-                return new double[]{velocityRef * W[1] / W[0]};
-
-            case "yVelocity":
-                if (dim > 1) {
-                    return new double[]{velocityRef * W[2] / W[0]};
-                } else {
-                    throw new UnsupportedOperationException("undefined value" + name);
-                }
-
-            case "zVelocity":
-                if (dim > 2) {
-                    return new double[]{velocityRef * W[3] / W[0]};
-                } else {
-                    throw new UnsupportedOperationException("undefined value" + name);
-                }
-
-            case "velocity":
-                double[] velocity = new double[dim];
-                for (int i = 0; i < dim; i++) {
-                    velocity[i] = velocityRef * W[i + 1] / W[0];
-                }
-                return velocity;
-
-            case "temperature":
-                double velocity2 = 0;
-                for (int i = 0; i < dim; i++) {
-                    velocity2 += (W[i + 1] / W[0]) * (W[i + 1] / W[0]);
-                }
-                return new double[]{velocityRef * velocityRef * (W[dim + 1] / W[0] - velocity2 / 2) / cv};
-
-            case "energy":
-                return new double[]{pRef * W[dim + 1]};
-
-            case "pressure":
-                return new double[]{pRef * pressure(W)};
-
-            default:
-                throw new UnsupportedOperationException("undefined value " + name);
-        }
-    }
-
-    double[] fplus(double W[], double p, double[] n) {
+    protected double[] fplus(double W[], double p, double[] n) {
         double[] f = new double[nEqs];
         double[] velocity = new double[dim];
         double Vn = 0;
@@ -477,7 +418,7 @@ public class NavierStokesR extends Aerodynamics {
         return f;
     }
 
-    double[] fminus(double W[], double p, double[] n) {
+    protected double[] fminus(double W[], double p, double[] n) {
         double[] f = new double[nEqs];
         double[] velocity = new double[dim];
         double Vn = 0;
@@ -599,6 +540,24 @@ public class NavierStokesR extends Aerodynamics {
         a[47] = (kapa * n[1]) / (Pr * Re * W[0]);
 
         return a;
+    }
+    
+    @Override
+    public double[] getResults(double[] W, double[] X, String name) {
+        switch (name.toLowerCase()) {
+            case "temperature":
+                double velocity2 = 0;
+                for (int i = 0; i < dim; i++) {
+                    velocity2 += (W[i + 1] / W[0]) * (W[i + 1] / W[0]);
+                }
+                return new double[]{velocityRef * velocityRef * (W[dim + 1] / W[0] - velocity2 / 2) / cv};
+
+            case "energy":
+                return new double[]{pRef * W[dim + 1]};
+
+            default:
+                return super.getResults(W, X, name);
+        }
     }
 }
 

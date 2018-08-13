@@ -109,7 +109,6 @@ public abstract class Aerodynamics implements Equation {
             cp = props.getDouble("cp");
             cv = props.getDouble("cv");
             kapa = cp / cv;
-            System.out.println("Poisson ratio: " + kapa);
         } else {
             throw new IOException("exactly two out of the three following parameters must be defined: "
                     + "kappa, cp, cv");
@@ -190,16 +189,18 @@ public abstract class Aerodynamics implements Equation {
                     vIn[1] = velocityIn * Math.sin(attackAngle[0]);
                     break;
             }
-            double veloSqr = 0;
-            for (int d = 0; d < dim; ++d) {
-                veloSqr += vIn[d] * vIn[d];
-            }
-            double EIn = 1 / (kapa - 1) + 0.5 * veloSqr;
+
             WIn[0] = 1;
             for (int d = 0; d < dim; ++d) {
                 WIn[d + 1] = vIn[d];
             }
+            
             if (nEqs > dim + 1) {
+                double veloSqr = 0;
+                for (int d = 0; d < dim; ++d) {
+                    veloSqr += vIn[d] * vIn[d];
+                }
+                double EIn = 1 / (kapa - 1) + 0.5 * veloSqr;
                 WIn[3] = EIn;
             }
         } else {
@@ -219,6 +220,7 @@ public abstract class Aerodynamics implements Equation {
         }
 
         // parameters for the viscous flow
+        double ReInf = -1;
         if (isDiffusive) {
             if (props.containsKey("reynolds") && props.containsKey("prandtl")
                     && !props.containsKey("viscosity") && !props.containsKey("conductivity")) {
@@ -239,13 +241,12 @@ public abstract class Aerodynamics implements Equation {
                 throw new IOException("either the Prandtl and Reynolds numbers, "
                         + "or dynamic viscosity and thermal conductivity must be specified");
             }
-            System.out.println("Stagnation Reynolds number: " + Re);
+
             // far field Reynolds
             double machInf = Math.sqrt(2 / (kapa - 1) * (Math.pow((1 / pOut), (kapa - 1) / kapa) - 1));
             double rhoInf = Math.pow(1 + ((kapa - 1) / 2) * machInf * machInf, 1 / (1 - kapa));
             double uInf = machInf * Math.sqrt((kapa * pOut) / rhoInf);
-            System.out.println("Far field Reynolds number: " + rhoInf * uInf * lRef / (rhoRef * velocityRef * lRef / Re));
-            System.out.println("Prandtl number: " + Pr);
+            ReInf = rhoInf * uInf * lRef / (rhoRef * velocityRef * lRef / Re);
         } else {
             Re = -1;  // temporarely
             Pr = -1;
@@ -256,6 +257,15 @@ public abstract class Aerodynamics implements Equation {
         if (props.containsKey("numericalFlux")) {
             numericalFluxType = props.getString("numericalFlux");
         }
+
+        System.out.println("---- notable physical parameters: ----");
+        System.out.println("heat capacity ratio          " + kapa);
+        if (isDiffusive) {
+            System.out.printf("stagnation Reynolds number   %.3e\n", Re);
+            System.out.printf("far-field Reynolds number    %.3e\n", ReInf);
+            System.out.printf("Prandtl number               %.3f\n", Pr);
+        }
+        System.out.println("--------------------------------------");
     }
 
     @Override
@@ -309,5 +319,55 @@ public abstract class Aerodynamics implements Equation {
     @Override
     public double[] getReferenceValues() {
         return new double[]{lRef, pRef, rhoRef, velocityRef, tRef};
+    }
+
+    @Override
+    public double[] getResults(double[] W, double[] X, String name) {
+        switch (name.toLowerCase()) {
+            case "mach":
+                double absVelocity = .0;
+                for (int d = 0; d < dim; ++d) {
+                    absVelocity += W[d + 1] * W[d + 1];
+                }
+                absVelocity = Math.sqrt(absVelocity) / W[0];
+
+                double a = Math.sqrt(kapa * pressure(W) / W[0]);
+                return new double[]{absVelocity / a};
+
+            case "density":
+                return new double[]{rhoRef * W[0]};
+
+            case "xvelocity":
+                return new double[]{velocityRef * W[1] / W[0]};
+
+            case "yvelocity":
+                if (dim > 1) {
+                    return new double[]{velocityRef * W[2] / W[0]};
+                } else {
+                    throw new UnsupportedOperationException("quantity \"" + name
+                            + "\" is only available in two or three dimensions");
+                }
+
+            case "zvelocity":
+                if (dim > 2) {
+                    return new double[]{velocityRef * W[3] / W[0]};
+                } else {
+                    throw new UnsupportedOperationException("quantity \"" + name
+                            + "\" is only available in three dimensions");
+                }
+
+            case "velocity":
+                double[] velocity = new double[dim];
+                for (int i = 0; i < dim; i++) {
+                    velocity[i] = velocityRef * W[i + 1] / W[0];
+                }
+                return velocity;
+
+            case "pressure":
+                return new double[]{pRef * pressure(W)};
+
+            default:
+                throw new UnsupportedOperationException("unknown quantity \"" + name + "\"");
+        }
     }
 }
