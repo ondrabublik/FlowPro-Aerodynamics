@@ -458,62 +458,22 @@ public class SpalartAllmaras extends Aerodynamics {
 
     @Override
     public double[] getResults(double[] W, double[] X, String name) {
-        switch (name) {
-            case "mach":
-                double absVelocity = .0;
-                for (int d = 0; d < dim; ++d) {
-                    absVelocity += W[d + 1] * W[d + 1];
-                }
-                absVelocity = Math.sqrt(absVelocity) / W[0];
-
-                double a = Math.sqrt(kapa * pressure(W) / W[0]);
-                return new double[]{absVelocity / a};
-
-            case "density":
-                return new double[]{rhoRef * W[0]};
-
-            case "xVelocity":
-                return new double[]{velocityRef * W[1] / W[0]};
-
-            case "yVelocity":
-                if (dim > 1) {
-                    return new double[]{velocityRef * W[2] / W[0]};
-                } else {
-                    throw new UnsupportedOperationException("undefined value" + name);
-                }
-
-            case "zVelocity":
-                if (dim > 3) {
-                    return new double[]{velocityRef * W[3] / W[0]};
-                } else {
-                    throw new UnsupportedOperationException("undefined value" + name);
-                }
-
-            case "velocity":
-                double[] velocity = new double[dim];
-                for (int i = 0; i < dim; i++) {
-                    velocity[i] = velocityRef * W[i + 1] / W[0];
-                }
-                return velocity;
-
+        switch (name.toLowerCase()) {
             case "temperature":
                 double velocity2 = 0;
                 for (int i = 0; i < dim; i++) {
-                    velocity2 += (W[i + 1] / W[0])*(W[i + 1] / W[0]);
+                    velocity2 += (W[i + 1] / W[0]) * (W[i + 1] / W[0]);
                 }
-                return new double[]{velocityRef * velocityRef * (W[dim + 1]/W[0] - velocity2/2) / cv};
+                return new double[]{velocityRef * velocityRef * (W[dim + 1] / W[0] - velocity2 / 2) / cv};
 
             case "energy":
                 return new double[]{pRef * W[dim + 1]};
-
-            case "pressure":
-                return new double[]{pRef * pressure(W)};
-
-            case "turbulenceViscosity":
+                        
+            case "turbulenceviscosity":
                 return new double[]{W[dim + 2] / W[0] / Re};
 
             default:
-                throw new UnsupportedOperationException("undefined value " + name);
+                return super.getResults(W, X, name);
         }
     }
 
