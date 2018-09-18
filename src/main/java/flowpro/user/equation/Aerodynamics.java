@@ -52,6 +52,10 @@ public abstract class Aerodynamics implements Equation {
     protected String numericalFluxType;
 
     @Override
+    public void setState(double dt, double t) {
+    }
+    
+    @Override
     public int dim() {
         return dim;
     }

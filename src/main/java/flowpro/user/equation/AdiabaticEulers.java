@@ -14,7 +14,7 @@ public class AdiabaticEulers extends Aerodynamics {
         int dimension = props.getInt("dimension");
         super.init(props, dimension, dimension + 1, false);
     }
-
+    
     @Override
     public double pressure(double[] W) {
         W[0] = limiteRho(W[0]);
