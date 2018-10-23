@@ -459,7 +459,7 @@ public class KOmega extends Aerodynamics {
     }
 
     @Override
-    public double[] getResults(double[] W, double[] X, String name) {
+    public double[] getResults(double[] W, double[] dW, double[] X, String name) {
         switch (name.toLowerCase()) {
             case "temperature":
                 double velocity2 = 0;
@@ -481,7 +481,7 @@ public class KOmega extends Aerodynamics {
                 return new double[]{W[dim + 2] / Math.exp(W[dim + 3] / W[0]) / Re};
 
             default:
-                return super.getResults(W, X, name);
+                return super.getResults(W, dW, X, name);
         }
     }
 

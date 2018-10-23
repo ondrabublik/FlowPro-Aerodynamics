@@ -2,49 +2,58 @@ package flowpro.user.equation;
 
 import flowpro.api.ElementData;
 import flowpro.api.FlowProProperties;
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
+import static flowpro.user.equation.Aerodynamics.RHO_TOL;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
-import java.net.ServerSocket;
-import java.net.Socket;
 import java.util.Arrays;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  *
  * @author ales
  */
-public class NavierStokesMatlabClient extends Aerodynamics {
+public class KOmegaSutherland extends Aerodynamics {
 
     protected static final double P_TOL = 1e-1;
-    public MatlabClient mc;
 
-    public void setState(double t, double dt) {
-        try {
-            mc.computeBoundaryLayer();
-        } catch (IOException ex) {
-            Logger.getLogger(NavierStokesMatlabClient.class.getName()).log(Level.SEVERE, null, ex);
-        } catch (ClassNotFoundException ex) {
-            Logger.getLogger(NavierStokesMatlabClient.class.getName()).log(Level.SEVERE, null, ex);
-        }
-    }
+    double kIn;
+    double omIn;
+
+    double LIM_TOL;
+
+    // Sutherland constant
+    double Suth;
+    
+    // parameters of turbulence model
+    double bk;
+    double bom;
+    double aom;
+    double Prt;
+    double sk;
+    double som;
 
     @Override
     public void init(FlowProProperties props) throws IOException {
         int dimension = props.getInt("dimension");
-        super.init(props, dimension, dimension + 2, props.getBoolean("isFlowViscous"));
+        super.init(props, dimension, dimension + 4, true);
 
-        // Launching Matlab
-        try {
-            mc = new MatlabClient();
-            mc.init();
-        } catch (Exception e) {
-            System.out.println("Matlab init error " + e);
+        // inlet
+        kIn = props.getDouble("kIn");
+        omIn = props.getDouble("omIn");
+        if (isInletSupersonic) {
+            WIn[dimension + 2] = kIn;
+            WIn[dimension + 3] = omIn;
         }
+
+        // Sutherland
+        Suth = props.getDouble("SuthConst");
+        
+        // parameters of turbulence model
+        bk = props.getDouble("bk");
+        bom = props.getDouble("bom");
+        aom = props.getDouble("aom");
+        Prt = props.getDouble("Prt");
+        sk = props.getDouble("sk");
+        som = props.getDouble("som");
     }
 
     @Override
@@ -71,16 +80,16 @@ public class NavierStokesMatlabClient extends Aerodynamics {
             }
         }
 
-        double momentum2 = .0;
-        for (int d = 0; d < dim; ++d) {
-            momentum2 += Ws[d + 1] * Ws[d + 1];
-        }
-        double Ek = momentum2 / (2 * Ws[0]);
-        if (Ws[dim + 1] < Ek) {
-            for (int j = 0; j < nBasis; j++) {
-                W[(dim + 1) * nBasis + j] = Ek;
-            }
-        }
+//        double momentum2 = .0;
+//        for (int d = 0; d < dim; ++d) {
+//            momentum2 += Ws[d+1] * Ws[d+1];
+//        }
+//        double Ek = momentum2 / (2 * Ws[0]);
+//        if (Ws[dim+1] < Ek) {
+//            for (int j = 0; j < nBasis; j++) {
+//                W[j][dim+1] = Ek;
+//            }
+//        }
     }
 
     @Override
@@ -139,6 +148,8 @@ public class NavierStokesMatlabClient extends Aerodynamics {
                 W[d + 1] = rhoIn * vIn[d];
             }
             W[dim + 1] = pOut / (kapa - 1) + 0.5 * rhoIn * VIn * VIn;
+            W[dim + 2] = rhoIn * kIn;
+            W[dim + 3] = rhoIn * omIn;
 
             return W;
         }
@@ -152,8 +163,8 @@ public class NavierStokesMatlabClient extends Aerodynamics {
         double[] f = new double[nEqs];
 
         switch (TT) {
-            case (BoundaryType.WALL):
-            case (BoundaryType.INVISCID_WALL):
+            case (Aerodynamics.BoundaryType.WALL):
+            case (Aerodynamics.BoundaryType.INVISCID_WALL):
                 double p = pressure(WR);
                 f[0] = 0;
                 double V = .0;
@@ -163,35 +174,24 @@ public class NavierStokesMatlabClient extends Aerodynamics {
                 }
                 f[dim + 1] = p * V;
 
-                // for ALE
                 for (int j = 0; j < nEqs; j++) {
                     f[j] += V * WR[j];
                 }
                 break;
 
-            case (BoundaryType.INLET):
-            case (BoundaryType.OUTLET):
+            case (Aerodynamics.BoundaryType.INLET):
+            case (Aerodynamics.BoundaryType.OUTLET):
                 f = convectiveFlux(WR, n, elem);
                 break;
 
             default: // interior edge
-                switch (numericalFluxType) {
-                    case "vanLeer":
-                        double[] fp = fplus(WL, pressure(WL), n);
-                        double[] fm = fminus(WR, pressure(WR), n);
-                        for (int j = 0; j < nEqs; j++) {
-                            f[j] = fp[j] + fm[j];
-                        }
-                        break;
-                    default:
-                        double[] fL = convectiveFlux(WL, n, elem);
-                        double[] fR = convectiveFlux(WR, n, elem);
-                        double maxEigenValue = Math.max(maxEigenvalue(WL, elem), maxEigenvalue(WR, elem));
-                        for (int j = 0; j < nEqs; j++) {
-                            f[j] = (fL[j] + fR[j] - maxEigenValue * (WR[j] - WL[j])) / 2;
-                        }
-                        break;
+                double[] fL = convectiveFlux(WL, n, elem);
+                double[] fR = convectiveFlux(WR, n, elem);
+                double maxEigenValue = Math.max(maxEigenvalue(WL, elem), maxEigenvalue(WR, elem));
+                for (int j = 0; j < nEqs; j++) {
+                    f[j] = (fL[j] + fR[j] - maxEigenValue * (WR[j] - WL[j])) / 2;
                 }
+                break;
         }
         return f;
     }
@@ -214,7 +214,8 @@ public class NavierStokesMatlabClient extends Aerodynamics {
             f[d + 1] = W[d + 1] * V + p * n[d];
         }
         f[dim + 1] = (W[dim + 1] + p) * V;
-
+        f[dim + 2] = W[dim + 2] * V;
+        f[dim + 3] = W[dim + 3] * V;
         return f;
     }
 
@@ -225,7 +226,7 @@ public class NavierStokesMatlabClient extends Aerodynamics {
         double p = pressure(WL);
 
         switch (TT) {
-            case (BoundaryType.WALL):
+            case (Aerodynamics.BoundaryType.WALL):
                 if (isDiffusive) {
                     double[] u = elem.meshVelocity;
                     double absVelocity2 = .0;
@@ -238,30 +239,15 @@ public class NavierStokesMatlabClient extends Aerodynamics {
                         WR[d + 1] = WR[0] * u[d];
                     }
                     WR[dim + 1] = p / (kapa - 1) + WR[0] * absVelocity2 / 2;
-
-                } else {
-                    WR = Arrays.copyOf(WL, nEqs);
-                    double nu = 0;
-                    for (int d = 0; d < dim; ++d) {
-                        nu += WL[d + 1] * n[d];
-                    }
-                    for (int d = 0; d < dim; ++d) { //tangent to wall
-                        WR[d + 1] = WL[d + 1] + n[d] * nu;
-                    }
+                    WR[dim + 2] = 0;
+                    WR[dim + 3] = WL[dim + 3];
+                    break;
                 }
-                break;
-            case (BoundaryType.INVISCID_WALL):
+            case (Aerodynamics.BoundaryType.INVISCID_WALL):
                 WR = Arrays.copyOf(WL, nEqs);
-                double nu = 0;
-                for (int d = 0; d < dim; ++d) {
-                    nu += WL[d + 1] * n[d];
-                }
-                for (int d = 0; d < dim; ++d) { //tangent to wall
-                    WR[d + 1] = WL[d + 1] + n[d] * nu;
-                }
                 break;
 
-            case (BoundaryType.INLET):
+            case (Aerodynamics.BoundaryType.INLET):
                 if (!isInletSupersonic) { // subsonic inlet
                     double mach;
                     if (p > pIn0) {
@@ -270,32 +256,22 @@ public class NavierStokesMatlabClient extends Aerodynamics {
                         mach = Math.sqrt((2 / (kapa - 1)) * (-1 + Math.pow(pIn0 / p, (kapa - 1) / kapa)));
                     }
                     double rhoIn = rhoIn0 * Math.pow((1 + ((kapa - 1) / 2) * mach * mach), 1 / (1 - kapa));
-                    double inletVelocity = mach * Math.sqrt((kapa * p) / rhoIn);
-                    double E = p / (kapa - 1) + 0.5 * rhoIn * inletVelocity * inletVelocity;
+                    double normalVelocity = mach * Math.sqrt((kapa * p) / rhoIn);
+                    double E = p / (kapa - 1) + 0.5 * rhoIn * normalVelocity * normalVelocity;
 
                     WR[0] = rhoIn;
-                    if (attackAngle == null) {
-                        for (int d = 0; d < dim; ++d) {
-                            WR[d + 1] = -rhoIn * inletVelocity * n[d];
-                        }
-                    } else {
-                        double[] dir;
-                        if (dim == 2) {
-                            dir = new double[]{Math.cos(attackAngle[0]), Math.sin(attackAngle[0])};
-                        } else {
-                            dir = new double[]{Math.cos(attackAngle[0]) * Math.cos(attackAngle[1]), Math.sin(attackAngle[0]) * Math.cos(attackAngle[1]), Math.sin(attackAngle[1])};
-                        }
-                        for (int d = 0; d < dim; ++d) {
-                            WR[d + 1] = rhoIn * inletVelocity * dir[d];
-                        }
+                    for (int d = 0; d < dim; ++d) {
+                        WR[d + 1] = -rhoIn * normalVelocity * n[d];
                     }
                     WR[dim + 1] = E;
+                    WR[dim + 2] = rhoIn * kIn;
+                    WR[dim + 3] = rhoIn * omIn;
                 } else { // supersonic inlet
                     WR = Arrays.copyOf(WIn, nEqs);
                 }
                 break;
 
-            case (BoundaryType.OUTLET):
+            case (Aerodynamics.BoundaryType.OUTLET):
                 double rhoOut = WL[0];
                 double absVelocity2 = .0;
                 for (int d = 0; d < dim; ++d) {
@@ -312,6 +288,8 @@ public class NavierStokesMatlabClient extends Aerodynamics {
                         WR[d + 1] = rhoOut * WL[d + 1] / WL[0];
                     }
                     WR[dim + 1] = pOut / (kapa - 1) + rhoOut * absVelocity2 / 2;
+                    WR[dim + 2] = WL[dim + 2];
+                    WR[dim + 3] = WL[dim + 3];
                 } else {  // supersonic outlet
                     WR = Arrays.copyOf(WL, nEqs);
                 }
@@ -348,10 +326,10 @@ public class NavierStokesMatlabClient extends Aerodynamics {
                 temp += velocity[f] * velocityJac[dim * f + d];
             }
             double pDer = (kapa - 1) * (dW[d * nEqs + dim + 1] - dW[d * nEqs] * velocity2 / 2 - rho * temp);
-            pOverRhoDer[d] = (rho * pDer - p * dW[d * nEqs]) / (rho * rho);
+            pOverRhoDer[d] = (rho * pDer - p * dW[d * nEqs]) / (rho * rho); // rho * rho * p * p !!!!!!!!!!!!!!!!
         }
 
-        // stress tensor calculation
+        // turbulentStress tensor calculation
         double[] stress = new double[dim * dim];
         double trace = .0;
         for (int d = 0; d < dim; ++d) {
@@ -364,17 +342,43 @@ public class NavierStokesMatlabClient extends Aerodynamics {
             stress[dim * d + d] += lam * trace;
         }
 
-        double constant = kapa / (kapa - 1) / Pr;
+        double k = W[dim + 2] / rho;
+        double om = W[dim + 3] / rho;
+        double mut = max(0, W[dim + 2] / Math.exp(om));
+
+        double[] turbulentStress = new double[dim * dim];
+        for (int i = 0; i < stress.length; i++) {
+            turbulentStress[i] = stress[i] * mut;
+        }
+        double kMax = 2.0 / 3 * max(0, W[dim + 2]);
+        for (int d = 0; d < dim; ++d) {
+            turbulentStress[dim * d + d] -= kMax;
+        }
+
+        double[] kDer = new double[dim];
+        double[] omDer = new double[dim];
+        for (int d = 0; d < dim; ++d) {
+            kDer[d] = (dW[d * nEqs + dim + 2] - dW[d * nEqs] * k) / rho;
+            omDer[d] = (dW[d * nEqs + dim + 3] - dW[d * nEqs] * om) / rho;
+        }
+
+        double constant = kapa / (kapa - 1) * (1 / Pr + mut / Prt);
+
+        // sutherland relation
+        double etaTemp = sutherland(rho, p);
+
         double[] flux = new double[nEqs];
-        flux[0] = 0;
         for (int d = 0; d < dim; ++d) {
             double tmp = .0;
             for (int f = 0; f < dim; ++f) {
-                flux[f + 1] += stress[dim * d + f] * n[d] / Re;
-                tmp += velocity[f] * stress[dim * d + f];
+                flux[f + 1] += (etaTemp * stress[dim * d + f] + turbulentStress[dim * d + f]) * n[d] / Re;
+                tmp += velocity[f] * (etaTemp * stress[dim * d + f] + turbulentStress[dim * d + f]);
             }
             flux[dim + 1] += (tmp + constant * pOverRhoDer[d]) * n[d] / Re;
+            flux[dim + 2] += (etaTemp + sk * mut) / Re * kDer[d] * n[d];
+            flux[dim + 3] += (etaTemp + som * mut) / Re * omDer[d] * n[d];
         }
+
         return flux;
     }
 
@@ -395,87 +399,77 @@ public class NavierStokesMatlabClient extends Aerodynamics {
 
     @Override
     public boolean isSourcePresent() {
-        return false;
+        return true;
     }
 
     @Override
     public double[] sourceTerm(double[] W, double[] dW, ElementData elem) { // zdrojovy clen
-        throw new UnsupportedOperationException("source is not present");
-    }
+        W[0] = limiteRho(W[0]);
+        double rho = W[0];
 
-    protected double[] fplus(double W[], double p, double[] n) {
-        double[] f = new double[nEqs];
+        double lam = -2. / 3; // Stokesuv vztah
+
         double[] velocity = new double[dim];
-        double Vn = 0;
-        double q2 = 0;
         for (int d = 0; d < dim; ++d) {
-            velocity[d] = W[d + 1] / W[0];
-            Vn += velocity[d] * n[d];
-            q2 += velocity[d] * velocity[d];
+            velocity[d] = W[d + 1] / rho;
         }
-        double a = Math.sqrt(kapa * p / W[0]); // rychlost zvuku
-        double M = Vn / a;
 
-        if (Math.abs(M) < 1) {
-            double fm = W[0] * a * ((M + 1) * (M + 1)) / 4; // mass flux 
-            f[0] = fm;
-            for (int d = 0; d < dim; ++d) {
-                f[d + 1] = fm * (velocity[d] + (-Vn + 2 * a) / kapa * n[d]);
-            }
-            f[dim + 1] = fm * ((q2 - Vn * Vn) / 2 + (((kapa - 1) * Vn + 2 * a)) * (((kapa - 1) * Vn + 2 * a)) / (2 * (kapa * kapa - 1)));
-        } else if (M >= 1) {
-            f[0] = W[0] * Vn;
-            for (int d = 0; d < dim; ++d) {
-                f[d + 1] = W[d + 1] * Vn + p * n[d];
-            }
-            f[dim + 1] = (W[dim + 1] + p) * Vn;
-        }
-        return f;
-    }
-
-    protected double[] fminus(double W[], double p, double[] n) {
-        double[] f = new double[nEqs];
-        double[] velocity = new double[dim];
-        double Vn = 0;
-        double q2 = 0;
+        double[] velocityJac = new double[dim * dim];
         for (int d = 0; d < dim; ++d) {
-            velocity[d] = W[d + 1] / W[0];
-            Vn += velocity[d] * n[d];
-            q2 += velocity[d] * velocity[d];
-        }
-        double a = Math.sqrt(kapa * p / W[0]); // rychlost zvuku
-        double M = Vn / a;
-
-        if (Math.abs(M) < 1) {
-            double fm = -W[0] * a * ((M - 1) * (M - 1)) / 4; // mass flux 
-            f[0] = fm;
-            for (int d = 0; d < dim; ++d) {
-                f[d + 1] = fm * (velocity[d] + (-Vn - 2 * a) / kapa * n[d]);
+            for (int f = 0; f < dim; ++f) {
+                velocityJac[dim * d + f] = (dW[f * nEqs + d + 1] - dW[f * nEqs] * velocity[d]) / rho;
             }
-            f[dim + 1] = fm * ((q2 - Vn * Vn) / 2 + (((kapa - 1) * Vn - 2 * a) * ((kapa - 1) * Vn - 2 * a)) / (2 * (kapa * kapa - 1)));
-        } else if (M <= -1) {
-            f[0] = W[0] * Vn;
-            for (int d = 0; d < dim; ++d) {
-                f[d + 1] = W[d + 1] * Vn + p * n[d];
-            }
-            f[dim + 1] = (W[dim + 1] + p) * Vn;
         }
-        return f;
-    }
 
-    @Override
-    public boolean isEquationsJacobian() {
-        return false;
-    }
+        double k = W[dim + 2] / rho;
+        double om = W[dim + 3] / rho;
+        double expOm = Math.exp(om);
+        double mut = max(0, W[dim + 2] / expOm);
 
-    @Override
-    public double[] convectiveFluxJacobian(double[] W, double[] n, ElementData elemData) {
-        throw new UnsupportedOperationException("convectiveFluxJacobian is not present");
-    }
+        // turbulentStress tensor calculation
+        double[] turbulentStress = new double[dim * dim];
+        double trace = .0;
+        for (int d = 0; d < dim; ++d) {
+            trace += velocityJac[dim * d + d];
+            for (int f = 0; f < dim; ++f) {
+                turbulentStress[dim * d + f] = mut * (velocityJac[dim * d + f] + velocityJac[dim * f + d]);
+            }
+        }
+        double kMax = 2.0 / 3 * max(0, W[dim + 2]);
+        for (int d = 0; d < dim; ++d) {
+            turbulentStress[dim * d + d] += mut * lam * trace - kMax;
+        }
 
-    @Override
-    public double[] diffusiveFluxJacobian(double[] W, double[] dW, double n[], ElementData elemData) {
-        throw new UnsupportedOperationException("diffusiveFluxJacobian is not present");
+        double omDerSqr = 0;
+        for (int d = 0; d < dim; ++d) {
+            double omDer = (dW[d * nEqs + dim + 3] - dW[d * nEqs] * om) / rho;
+            omDerSqr += omDer * omDer;
+        }
+
+        double Tv = 0;
+        for (int d = 0; d < dim; d++) {
+            for (int f = 0; f < dim; f++) {
+                Tv += turbulentStress[dim * d + f] * velocityJac[dim * d + f];
+            }
+        }
+
+        if (Tv > 10 * bk * rho * k * expOm) {
+            Tv = 10 * bk * rho * k * expOm;
+        }
+
+        double Tvom = aom / max(1e-8, k) * Tv;
+        if (Tvom > 100 * bom * rho * expOm) {
+            Tvom = 100 * bom * rho * expOm;
+        }
+
+        // sutherland relation
+        double p = pressure(W);
+        double etaTemp = sutherland(rho, p);
+
+        double[] source = new double[nEqs];
+        source[dim + 2] = max(Tv - bk * rho * k * expOm, 0);
+        source[dim + 3] = max(Tvom - bom * rho * expOm + 1 / Re * (etaTemp + som * mut) * omDerSqr, 0);
+        return source;
     }
 
     @Override
@@ -491,62 +485,31 @@ public class NavierStokesMatlabClient extends Aerodynamics {
             case "energy":
                 return new double[]{pRef * W[dim + 1]};
 
+            case "k":
+                return new double[]{W[dim + 2] / W[0]};
+
+            case "omega":
+                return new double[]{W[dim + 3] / W[0]};
+
+            case "turbulentviscosity":
+                return new double[]{W[dim + 2] / Math.exp(W[dim + 3] / W[0]) / Re};
+
             default:
                 return super.getResults(W, dW, X, name);
         }
     }
 
-    class MatlabClient {
+    public double sutherland(double rho, double p) {
+        double T = kapa / (kapa - 1) / Pr * p / rho;
+        double TRef = kapa / (kapa - 1) / Pr * pRef / rhoRef;
+        return Math.pow(T/TRef,1.5)*(1+Suth/TRef)/(T/TRef + Suth/TRef);
+    }
 
-        Socket socket = null;
-        ObjectOutputStream out;
-        ObjectInputStream in;
-
-        MatlabClient() {
-            try (ServerSocket listener = new ServerSocket(5767)) {
-                socket = listener.accept();
-                socket.setTcpNoDelay(true);
-                socket.setKeepAlive(true);
-                out = new ObjectOutputStream(new BufferedOutputStream(socket.getOutputStream()));
-                out.writeObject("test");
-                out.flush();
-                in = new ObjectInputStream(new BufferedInputStream(socket.getInputStream()));
-                in.readObject();
-                System.out.println("Succesfully connect with Matlab ...");
-            } catch (Exception e) {
-                System.out.println(e);
-            }
-        }
-
-        void init() throws IOException, ClassNotFoundException {
-            out.writeObject("init");
-            out.flush();
-            //-----------------------------
-
-            //-----------------------------
-            in.readObject();
-        }
-
-        void computeBoundaryLayer() throws IOException, ClassNotFoundException {
-            out.writeObject("def");
-            out.flush();
-            //-----------------------------
-
-            out.writeDouble(1.0);
-            out.flush();
-
-            //-----------------------------
-            in.readObject();
-        }
-
-        void nextTimeLevel() throws IOException, ClassNotFoundException {
-            out.writeObject("next");
-            out.flush();
-            in.readObject();
-        }
-
-        void close() throws IOException {
-            socket.close();
+    public double max(double a, double b) {
+        if (a > b) {
+            return a;
+        } else {
+            return b;
         }
     }
 }

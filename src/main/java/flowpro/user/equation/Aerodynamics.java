@@ -326,7 +326,7 @@ public abstract class Aerodynamics implements Equation {
     }
 
     @Override
-    public double[] getResults(double[] W, double[] X, String name) {
+    public double[] getResults(double[] W, double[] dW, double[] X, String name) {
         switch (name.toLowerCase()) {
             case "mach":
                 double absVelocity = .0;

@@ -543,7 +543,7 @@ public class NavierStokesR extends Aerodynamics {
     }
     
     @Override
-    public double[] getResults(double[] W, double[] X, String name) {
+    public double[] getResults(double[] W, double[] dW, double[] X, String name) {
         switch (name.toLowerCase()) {
             case "temperature":
                 double velocity2 = 0;
@@ -556,7 +556,7 @@ public class NavierStokesR extends Aerodynamics {
                 return new double[]{pRef * W[dim + 1]};
 
             default:
-                return super.getResults(W, X, name);
+                return super.getResults(W, dW, X, name);
         }
     }
 }

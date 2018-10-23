@@ -381,7 +381,7 @@ public class NavierStokesStorm extends Aerodynamics {
     }
 
     @Override
-    public double[] getResults(double[] W, double[] X, String name) {
+    public double[] getResults(double[] W, double[] dW, double[] X, String name) {
         switch (name) {
             case "mach":
                 double absVelocity = .0;
