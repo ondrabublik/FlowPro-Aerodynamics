@@ -22,7 +22,7 @@ public class KOmegaSutherland extends Aerodynamics {
 
     // Sutherland constant
     double Suth;
-    
+
     // parameters of turbulence model
     double bk;
     double bom;
@@ -46,7 +46,7 @@ public class KOmegaSutherland extends Aerodynamics {
 
         // Sutherland
         Suth = props.getDouble("SuthConst");
-        
+
         // parameters of turbulence model
         bk = props.getDouble("bk");
         bom = props.getDouble("bom");
@@ -362,10 +362,11 @@ public class KOmegaSutherland extends Aerodynamics {
             omDer[d] = (dW[d * nEqs + dim + 3] - dW[d * nEqs] * om) / rho;
         }
 
-        double constant = kapa / (kapa - 1) * (1 / Pr + mut / Prt);
-
+        
         // sutherland relation
         double etaTemp = sutherland(rho, p);
+        
+        double constant = kapa / (kapa - 1) * (etaTemp / Pr + mut / Prt);
 
         double[] flux = new double[nEqs];
         for (int d = 0; d < dim; ++d) {
@@ -500,9 +501,9 @@ public class KOmegaSutherland extends Aerodynamics {
     }
 
     public double sutherland(double rho, double p) {
-        double T = kapa / (kapa - 1) / Pr * p / rho;
-        double TRef = kapa / (kapa - 1) / Pr * pRef / rhoRef;
-        return Math.pow(T/TRef,1.5)*(1+Suth/TRef)/(T/TRef + Suth/TRef);
+        double T = p / rho;
+        double TRef = 1 / (cv * (kapa - 1)) * pRef / rhoRef;
+        return Math.pow(T, 1.5) * (1 + Suth / TRef) / (T + Suth / TRef);
     }
 
     public double max(double a, double b) {
