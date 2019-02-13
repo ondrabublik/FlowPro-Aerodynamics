@@ -51,10 +51,15 @@ public abstract class Aerodynamics implements Equation {
     // numerical flux
     protected String numericalFluxType;
 
+    // time and time step
+    protected double t, dt;
+
     @Override
     public void setState(double dt, double t) {
+        this.dt = dt;
+        this.t = t;
     }
-    
+
     @Override
     public int dim() {
         return dim;
@@ -198,7 +203,7 @@ public abstract class Aerodynamics implements Equation {
             for (int d = 0; d < dim; ++d) {
                 WIn[d + 1] = vIn[d];
             }
-            
+
             if (nEqs > dim + 1) {
                 double veloSqr = 0;
                 for (int d = 0; d < dim; ++d) {
@@ -370,6 +375,28 @@ public abstract class Aerodynamics implements Equation {
             case "pressure":
                 return new double[]{pRef * pressure(W)};
 
+            case "vorticity":
+                double rho = W[0];
+                double[] velocityAux = new double[dim];
+                for (int d = 0; d < dim; ++d) {
+                    velocityAux[d] = W[d + 1] / rho;
+                }
+                double[] velocityJac = new double[dim * dim];
+                for (int d = 0; d < dim; ++d) {
+                    for (int f = 0; f < dim; ++f) {
+                        velocityJac[dim * d + f] = (dW[f * nEqs + d + 1] - dW[f * nEqs] * velocityAux[d]) / rho;
+                    }
+                }
+                if (dim == 2) {
+                    return new double[]{0, 0, velocityJac[dim * 1 + 0] - velocityJac[dim * 0 + 1]};
+
+                }
+                if (dim == 3) {
+                    return new double[]{velocityJac[dim * 2 + 1] - velocityJac[dim * 1 + 2], velocityJac[dim * 0 + 2] - velocityJac[dim * 2 + 0], velocityJac[dim * 1 + 0] - velocityJac[dim * 0 + 1]};
+                } else {
+                    throw new UnsupportedOperationException("quantity \"" + name
+                            + "\" is only available in one dimensions");
+                }
             default:
                 throw new UnsupportedOperationException("unknown quantity \"" + name + "\"");
         }

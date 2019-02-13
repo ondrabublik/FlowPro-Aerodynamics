@@ -350,7 +350,7 @@ public class SpalartAllmaras extends Aerodynamics {
             vtDer[d] = 1 / rho * (dW[d * nEqs + dim + 2] - dW[d * nEqs] * vt);
         }
 
-        double xi = vt; // vt/v ????????
+        double xi = rho*vt; // vt/v ????????
         double fv1 = xi * xi * xi / (xi * xi * xi + cv1 * cv1 * cv1);
         double mut = rho * vt * fv1;
 
@@ -436,7 +436,7 @@ public class SpalartAllmaras extends Aerodynamics {
 
         double D = elem.currentWallDistance;
 
-        double xi = rho * vt; // vt/v
+        double xi = rho*vt; // vt/v 
         double ft2 = 0; //ct3*Math.exp(-ct4*xi*xi);
         double ft1 = 0;
         double fv1 = xi * xi * xi / (xi * xi * xi + cv1 * cv1 * cv1);
@@ -469,8 +469,10 @@ public class SpalartAllmaras extends Aerodynamics {
             case "energy":
                 return new double[]{pRef * W[dim + 1]};
                         
-            case "turbulenceviscosity":
-                return new double[]{W[dim + 2] / W[0] / Re};
+            case "mut":
+                double xi = max(W[dim+2],0); // vt/v
+                double fv1 = xi * xi * xi / (xi * xi * xi + cv1 * cv1 * cv1);
+                return new double[]{W[dim + 2]*fv1};
 
             default:
                 return super.getResults(W, dW, X, name);
