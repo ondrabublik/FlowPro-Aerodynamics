@@ -326,6 +326,14 @@ public abstract class Aerodynamics implements Equation {
     }
 
     @Override
+    public double[] combineShockSensors(double[] shock){
+        for(int m = 1; m < nEqs; m++){
+            shock[m] = shock[0]; // all shock sensors are acording density
+        }
+        return shock;
+    }
+    
+    @Override
     public double[] getReferenceValues() {
         return new double[]{lRef, pRef, rhoRef, velocityRef, tRef};
     }

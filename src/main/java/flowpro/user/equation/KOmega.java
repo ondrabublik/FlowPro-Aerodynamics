@@ -478,6 +478,14 @@ public class KOmega extends Aerodynamics {
     }
 
     @Override
+    public double[] combineShockSensors(double[] shock){
+        for(int m = 1; m < nEqs; m++){
+            shock[m] = shock[0]; // Navier-stokes shock sensors are acording density
+        }
+        return shock;
+    }
+    
+    @Override
     public double[] getResults(double[] W, double[] dW, double[] X, String name) {
         switch (name.toLowerCase()) {
             case "temperature":
