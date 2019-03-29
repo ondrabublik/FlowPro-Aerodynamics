@@ -37,26 +37,6 @@ public class NavierStokesR extends Aerodynamics {
     }
 
     @Override
-    public void limitUnphysicalValues(double[] Ws, double[] W, int nBasis) { // limituje zaporne hodnoty
-        if (Ws[0] < RHO_TOL) {
-            for (int j = 0; j < nBasis; j++) {
-                W[j] = RHO_TOL;
-            }
-        }
-
-        double momentum2 = .0;
-        for (int d = 0; d < dim; ++d) {
-            momentum2 += Ws[d + 1] * Ws[d + 1];
-        }
-        double Ek = momentum2 / (2 * Ws[0]);
-        if (Ws[dim + 1] < Ek) {
-            for (int j = 0; j < nBasis; j++) {
-                W[(dim + 1) * nBasis + j] = Ek;
-            }
-        }
-    }
-
-    @Override
     public void saveReferenceValues(String filePath) throws IOException {
         FlowProProperties output = new FlowProProperties();
 

@@ -18,7 +18,7 @@ public abstract class Aerodynamics implements Equation {
     }
 
     // tolerance pro hodnotu hustoty a tlaku
-    protected static final double RHO_TOL = 1e-1;
+    protected static final double RHO_TOL = 1e-2;
 
     protected int dim;
     protected int nEqs;

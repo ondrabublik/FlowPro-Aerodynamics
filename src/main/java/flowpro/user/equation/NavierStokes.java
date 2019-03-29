@@ -12,7 +12,7 @@ import java.util.Arrays;
  */
 public class NavierStokes extends Aerodynamics {
 
-    protected static final double P_TOL = 1e-1;
+    protected static final double P_TOL = 1e-2;
 
     @Override
     public void init(FlowProProperties props) throws IOException {
@@ -34,26 +34,6 @@ public class NavierStokes extends Aerodynamics {
             p = P_TOL * Math.exp((p - P_TOL) / P_TOL);
         }
         return p;
-    }
-
-    @Override
-    public void limitUnphysicalValues(double[] Ws, double[] W, int nBasis) { // limituje zaporne hodnoty
-        if (Ws[0] < RHO_TOL) {
-            for (int j = 0; j < nBasis; j++) {
-                W[j] = RHO_TOL;
-            }
-        }
-
-        double momentum2 = .0;
-        for (int d = 0; d < dim; ++d) {
-            momentum2 += Ws[d + 1] * Ws[d + 1];
-        }
-        double Ek = momentum2 / (2 * Ws[0]);
-        if (Ws[dim + 1] < Ek) {
-            for (int j = 0; j < nBasis; j++) {
-                W[(dim + 1) * nBasis + j] = Ek;
-            }
-        }
     }
 
     @Override
@@ -127,7 +107,8 @@ public class NavierStokes extends Aerodynamics {
         switch (TT) {
             case (BoundaryType.WALL):
             case (BoundaryType.INVISCID_WALL):
-                double p = pressure(WR);
+                //double p = pressure(WR);
+                double p = pressure(WL);
                 f[0] = 0;
                 double V = .0;
                 for (int d = 0; d < dim; ++d) {
@@ -219,7 +200,7 @@ public class NavierStokes extends Aerodynamics {
                         nu += WL[d + 1] * n[d];
                     }
                     for (int d = 0; d < dim; ++d) { //tangent to wall
-                        WR[d + 1] = WL[d + 1] + n[d] * nu;
+                        WR[d + 1] = WL[d + 1] - n[d] * nu; // ?????????????????????????????? WR[d + 1] = WL[d + 1] - n[d] * nu;
                     }
                 }
                 break;
@@ -230,7 +211,7 @@ public class NavierStokes extends Aerodynamics {
                     nu += WL[d + 1] * n[d];
                 }
                 for (int d = 0; d < dim; ++d) { //tangent to wall
-                    WR[d + 1] = WL[d + 1] + n[d] * nu;
+                    WR[d + 1] = WL[d + 1] - n[d] * nu; // ?????????????????????????????? WR[d + 1] = WL[d + 1] - n[d] * nu;
                 }
                 break;
 
@@ -374,7 +355,7 @@ public class NavierStokes extends Aerodynamics {
     @Override
     public double[] sourceTerm(double[] W, double[] dW, ElementData elem) { // zdrojovy clen
         throw new UnsupportedOperationException("source is not present");
-    }    
+    }
 
     protected double[] fplus(double W[], double p, double[] n) {
         double[] f = new double[nEqs];
@@ -396,14 +377,12 @@ public class NavierStokes extends Aerodynamics {
                 f[d + 1] = fm * (velocity[d] + (-Vn + 2 * a) / kapa * n[d]);
             }
             f[dim + 1] = fm * ((q2 - Vn * Vn) / 2 + (((kapa - 1) * Vn + 2 * a)) * (((kapa - 1) * Vn + 2 * a)) / (2 * (kapa * kapa - 1)));
-        } else {
-            if (M >= 1) {
-                f[0] = W[0] * Vn;
-                for (int d = 0; d < dim; ++d) {
-                    f[d + 1] = W[d + 1] * Vn + p * n[d];
-                }
-                f[dim + 1] = (W[dim + 1] + p) * Vn;
+        } else if (M >= 1) {
+            f[0] = W[0] * Vn;
+            for (int d = 0; d < dim; ++d) {
+                f[d + 1] = W[d + 1] * Vn + p * n[d];
             }
+            f[dim + 1] = (W[dim + 1] + p) * Vn;
         }
         return f;
     }
@@ -428,14 +407,12 @@ public class NavierStokes extends Aerodynamics {
                 f[d + 1] = fm * (velocity[d] + (-Vn - 2 * a) / kapa * n[d]);
             }
             f[dim + 1] = fm * ((q2 - Vn * Vn) / 2 + (((kapa - 1) * Vn - 2 * a) * ((kapa - 1) * Vn - 2 * a)) / (2 * (kapa * kapa - 1)));
-        } else {
-            if (M <= -1) {
-                f[0] = W[0] * Vn;
-                for (int d = 0; d < dim; ++d) {
-                    f[d + 1] = W[d + 1] * Vn + p * n[d];
-                }
-                f[dim + 1] = (W[dim + 1] + p) * Vn;
+        } else if (M <= -1) {
+            f[0] = W[0] * Vn;
+            for (int d = 0; d < dim; ++d) {
+                f[d + 1] = W[d + 1] * Vn + p * n[d];
             }
+            f[dim + 1] = (W[dim + 1] + p) * Vn;
         }
         return f;
     }
@@ -531,7 +508,7 @@ public class NavierStokes extends Aerodynamics {
 
         return a;
     }
-    
+
     @Override
     public double[] getResults(double[] W, double[] dW, double[] X, String name) {
         switch (name.toLowerCase()) {
@@ -548,5 +525,5 @@ public class NavierStokes extends Aerodynamics {
             default:
                 return super.getResults(W, dW, X, name);
         }
-    }    
+    }
 }
