@@ -366,6 +366,16 @@ public abstract class Aerodynamics implements Equation {
                     velocity[i] = velocityRef * W[i + 1] / W[0];
                 }
                 return velocity;
+                
+            case "vorticity":
+                if (dim == 2) {
+                    double dvdx = (dW[2] * W[0] - W[2] * dW[0]) / (W[0]*W[0]);
+                    double dudy = (dW[nEqs + 1] * W[0] - W[1] * dW[nEqs]) / (W[0]*W[0]);
+                    return new double[] {velocityRef / lRef * (dvdx - dudy)};                
+                } else {
+                    throw new UnsupportedOperationException("quantity \"" + name
+                            + "\" is only available in two dimensions");
+                }
 
             case "pressure":
                 return new double[]{pRef * pressure(W)};
