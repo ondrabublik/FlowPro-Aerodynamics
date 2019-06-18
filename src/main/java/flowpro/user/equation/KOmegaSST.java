@@ -11,25 +11,36 @@ import java.util.Arrays;
  *
  * @author ales
  */
-public class KOmegaSutherland extends Aerodynamics {
+public class KOmegaSST extends Aerodynamics {
 
     protected static final double P_TOL = 1e-1;
 
     double kIn;
     double omIn;
+    double omWall;
+    
+    double kref;
+    double omref;
+    double muref;
 
     double LIM_TOL;
 
     // Sutherland constant
     double Suth;
-
+    
     // parameters of turbulence model
-    double bk;
-    double bom;
-    double aom;
+    double a1;
+    double sk1;
+    double som1;
+    double alpha1;
+    double beta1;
+    double betast;   // beta star 
+    double sk2;
+    double som2;
+    double alpha2;
+    double beta2;
     double Prt;
-    double sk;
-    double som;
+ 
 
     @Override
     public void init(FlowProProperties props) throws IOException {
@@ -43,17 +54,22 @@ public class KOmegaSutherland extends Aerodynamics {
             WIn[dimension + 2] = kIn;
             WIn[dimension + 3] = omIn;
         }
-
+        
         // Sutherland
         Suth = props.getDouble("SuthConst");
-
+        
         // parameters of turbulence model
-        bk = props.getDouble("bk");
-        bom = props.getDouble("bom");
-        aom = props.getDouble("aom");
+        a1 = props.getDouble("a1");
+        sk1 = props.getDouble("sk1");
+        som1 = props.getDouble("som1");
+        alpha1 = props.getDouble("alpha1");
+        beta1 = props.getDouble("beta1");
+        betast = props.getDouble("betast");
+        sk2 = props.getDouble("sk2");
+        som2 = props.getDouble("som2");
+        alpha2 = props.getDouble("alpha2");
+        beta2 = props.getDouble("beta2");
         Prt = props.getDouble("Prt");
-        sk = props.getDouble("sk");
-        som = props.getDouble("som");
     }
 
     @Override
@@ -221,6 +237,7 @@ public class KOmegaSutherland extends Aerodynamics {
                     WR[dim + 1] = p / (kapa - 1) + WR[0] * absVelocity2 / 2;
                     WR[dim + 2] = 0;
                     WR[dim + 3] = WL[dim + 3];
+                    //WR[dim + 3] = omWall;
                     break;
                 }
             case (Aerodynamics.BoundaryType.INVISCID_WALL):
@@ -311,26 +328,40 @@ public class KOmegaSutherland extends Aerodynamics {
 
         // turbulentStress tensor calculation
         double[] stress = new double[dim * dim];
+        //double[] vortic = new double[dim * dim];
         double trace = .0;
         for (int d = 0; d < dim; ++d) {
             trace += velocityJac[dim * d + d];
             for (int f = 0; f < dim; ++f) {
                 stress[dim * d + f] = velocityJac[dim * d + f] + velocityJac[dim * f + d];
+            //    vortic[dim * d + f] = (velocityJac[dim * d + f] - velocityJac[dim * f + d]);
             }
         }
         for (int d = 0; d < dim; ++d) {
             stress[dim * d + d] += lam * trace;
         }
 
-        double k = W[dim + 2] / rho;
+        double k = max(W[dim + 2]/rho,1e-10);
         double om = W[dim + 3] / rho;
-        double mut = max(0, W[dim + 2] / Math.exp(om));
+        
+        // sutherland relation
+        double etaTemp = sutherland(rho, p);
+        
+        double vortic = Math.abs(velocityJac[1]-velocityJac[2]);
+        double walldist = Math.abs(elem.currentWallDistance);  
+        if (walldist < 1e-5){                // zero at wall makes problems - adjust value according to mesh
+            walldist = 1e-5;
+        }
+        double arg2 = max(2*Math.sqrt(k)/(0.09*Math.exp(om)*walldist)/Math.sqrt(Re),500*etaTemp/rho/(walldist*walldist*Math.exp(om))/Re);
+        double F2 = Math.tanh(arg2*arg2);
+        
+        double mut = max(0, rho*a1*k / max(a1*Math.exp(om),vortic*F2));
 
         double[] turbulentStress = new double[dim * dim];
         for (int i = 0; i < stress.length; i++) {
             turbulentStress[i] = stress[i] * mut;
         }
-        double kMax = 2.0 / 3 * max(0, W[dim + 2]);
+        double kMax = 2.0 / 3 * max(0, rho*k);
         for (int d = 0; d < dim; ++d) {
             turbulentStress[dim * d + d] -= kMax;
         }
@@ -342,11 +373,23 @@ public class KOmegaSutherland extends Aerodynamics {
             omDer[d] = (dW[d * nEqs + dim + 3] - dW[d * nEqs] * om) / rho;
         }
 
-        
-        // sutherland relation
-        double etaTemp = sutherland(rho, p);
-        
         double constant = kapa / (kapa - 1) * (etaTemp / Pr + mut / Prt);
+        
+        double omkDer = 0;
+        for (int d = 0; d < dim; ++d) {
+            omkDer += omDer[d] * kDer[d];
+        }
+        
+        double CD = max(2*som2*rho*omkDer,1e-10);
+        double arg11 = max(Math.sqrt(k)/(0.09*Math.exp(om)*walldist)/Math.sqrt(Re),500*etaTemp/rho/(Math.exp(om)*walldist*walldist)/Re);
+        double arg12 = 4*rho*som2*k/(CD*walldist*walldist);
+        double arg1 = min(arg11,arg12);   
+        double F1 = Math.tanh(Math.pow(arg1,4));
+        
+        double sk0 = F1*sk1 + (1-F1)*sk2;
+        double som0 = F1*som1 + (1-F1)*som2;
+        //double alpha0 = F1*alpha1 + (1-F1)*alpha2;
+        //double beta0 = F1*beta1 + (1-F1)*beta2;
 
         double[] flux = new double[nEqs];
         for (int d = 0; d < dim; ++d) {
@@ -356,8 +399,8 @@ public class KOmegaSutherland extends Aerodynamics {
                 tmp += velocity[f] * (etaTemp * stress[dim * d + f] + turbulentStress[dim * d + f]);
             }
             flux[dim + 1] += (tmp + constant * pOverRhoDer[d]) * n[d] / Re;
-            flux[dim + 2] += (etaTemp + sk * mut) / Re * kDer[d] * n[d];
-            flux[dim + 3] += (etaTemp + som * mut) / Re * omDer[d] * n[d];
+            flux[dim + 2] += (etaTemp + sk0 * mut) / Re * kDer[d] * n[d];
+            flux[dim + 3] += (etaTemp + som0 * mut) / Re * omDer[d] * n[d];
         }
 
         return flux;
@@ -369,7 +412,7 @@ public class KOmegaSutherland extends Aerodynamics {
 
         double[] flux = diffusiveFlux(Wc, dWc, n, elem);
         if (TT < 0) {
-            if (TT == BoundaryType.WALL) {
+            if (TT == Aerodynamics.BoundaryType.WALL) {
                 flux[dim + 1] = .0;
             } else {
                 Arrays.fill(flux, .0);
@@ -394,18 +437,31 @@ public class KOmegaSutherland extends Aerodynamics {
         for (int d = 0; d < dim; ++d) {
             velocity[d] = W[d + 1] / rho;
         }
-
+        
         double[] velocityJac = new double[dim * dim];
         for (int d = 0; d < dim; ++d) {
             for (int f = 0; f < dim; ++f) {
                 velocityJac[dim * d + f] = (dW[f * nEqs + d + 1] - dW[f * nEqs] * velocity[d]) / rho;
             }
         }
+        
+        double p = pressure(W);
 
-        double k = W[dim + 2] / rho;
+        double k = max(W[dim + 2]/rho,1e-10);
         double om = W[dim + 3] / rho;
         double expOm = Math.exp(om);
-        double mut = max(0, W[dim + 2] / expOm);
+        
+        double etaTemp = sutherland(rho, p);
+        
+        double vortic = Math.abs(velocityJac[1]-velocityJac[2]);
+        double walldist = Math.abs(elem.currentWallDistance);  
+        if (walldist < 1e-5){                // zero at wall makes problems - adjust value according to mesh
+            walldist = 1e-5;
+        }
+        double arg2 = max(2*Math.sqrt(k)/(0.09*Math.exp(om)*walldist)/Math.sqrt(Re),500*etaTemp/rho/(walldist*walldist*Math.exp(om))/Re);
+        double F2 = Math.tanh(arg2*arg2);
+        
+        double mut = max(0, rho*a1*k / max(a1*Math.exp(om),vortic*F2));      
 
         // turbulentStress tensor calculation
         double[] turbulentStress = new double[dim * dim];
@@ -416,14 +472,17 @@ public class KOmegaSutherland extends Aerodynamics {
                 turbulentStress[dim * d + f] = mut * (velocityJac[dim * d + f] + velocityJac[dim * f + d]);
             }
         }
-        double kMax = 2.0 / 3 * max(0, W[dim + 2]);
+        double kMax = 2.0 / 3 * max(0, rho*k);
         for (int d = 0; d < dim; ++d) {
             turbulentStress[dim * d + d] += mut * lam * trace - kMax;
         }
 
+        double omkDer = 0;
         double omDerSqr = 0;
         for (int d = 0; d < dim; ++d) {
+            double kDer = (dW[d * nEqs + dim + 2] - dW[d * nEqs] * k) / rho;
             double omDer = (dW[d * nEqs + dim + 3] - dW[d * nEqs] * om) / rho;
+            omkDer += omDer * kDer;
             omDerSqr += omDer * omDer;
         }
 
@@ -433,23 +492,30 @@ public class KOmegaSutherland extends Aerodynamics {
                 Tv += turbulentStress[dim * d + f] * velocityJac[dim * d + f];
             }
         }
+              
+        double CD = max(2*som2*rho*omkDer,1e-10);
+        double arg11 = max(Math.sqrt(k)/(0.09*Math.exp(om)*walldist)/Math.sqrt(Re),500*etaTemp/rho/(Math.exp(om)*walldist*walldist)/Re);
+        double arg12 = 4*rho*som2*k/(CD*walldist*walldist);
+        double arg1 = min(arg11,arg12);   
+        double F1 = Math.tanh(Math.pow(arg1,4));
+        
+        //double sk0 = F1*sk1 + (1-F1)*sk2;
+        double som0 = F1*som1 + (1-F1)*som2;
+        double alpha0 = F1*alpha1 + (1-F1)*alpha2;
+        double beta0 = F1*beta1 + (1-F1)*beta2;
 
-        if (Tv > 10 * bk * rho * k * expOm) {
-            Tv = 10 * bk * rho * k * expOm;
+        if (Tv > 10 * betast * rho * k * expOm) {   
+            Tv = 10 * betast * rho * k * expOm;
         }
 
-        double Tvom = aom / max(1e-8, k) * Tv;
-        if (Tvom > 100 * bom * rho * expOm) {
-            Tvom = 100 * bom * rho * expOm;
+        double Tvom = alpha0 * rho / mut /expOm * Tv;   
+        if (Tvom > 10 * beta0 * rho * expOm) {     // moje zmena, opatrne (bylo 100*...)
+            Tvom = 10 * beta0 * rho * expOm;
         }
-
-        // sutherland relation
-        double p = pressure(W);
-        double etaTemp = sutherland(rho, p);
 
         double[] source = new double[nEqs];
-        source[dim + 2] = max(Tv - bk * rho * k * expOm, 0);
-        source[dim + 3] = max(Tvom - bom * rho * expOm + 1 / Re * (etaTemp + som * mut) * omDerSqr, 0);
+        source[dim + 2] = max(Tv - betast * rho * k * expOm, 0);  
+        source[dim + 3] = max(Tvom - beta0 * rho * expOm + 1 / Re * som2*rho/expOm *omkDer *2*(1-F1) + 1 / Re * (etaTemp + som0 * mut) * omDerSqr, 0);
         return source;
     }
 
@@ -470,10 +536,10 @@ public class KOmegaSutherland extends Aerodynamics {
                 return new double[]{W[dim + 2] / W[0]};
 
             case "omega":
-                return new double[]{W[dim + 3] / W[0]};
+                return new double[]{Math.exp(W[dim + 3] / W[0])};
 
             case "turbulentviscosity":
-                return new double[]{W[dim + 2] / Math.exp(W[dim + 3] / W[0]) / Re};
+                return new double[]{W[dim + 2] / Math.exp(W[dim + 3] / W[0])};
 
             default:
                 return super.getResults(W, dW, X, name);
@@ -482,8 +548,8 @@ public class KOmegaSutherland extends Aerodynamics {
 
     public double sutherland(double rho, double p) {
         double T = p / rho;
-        double TRef = 1 / (cv * (kapa - 1)) * pRef / rhoRef;
-        return Math.pow(T, 1.5) * (1 + Suth / TRef) / (T + Suth / TRef);
+        double TRef = 1/ (cv*(kapa - 1)) * pRef / rhoRef;
+        return Math.pow(T,1.5)*(1+Suth/TRef)/(T + Suth/TRef);
     }
 
     public double max(double a, double b) {
@@ -493,4 +559,13 @@ public class KOmegaSutherland extends Aerodynamics {
             return b;
         }
     }
+    public double min(double a, double b) {
+        if (a < b) {
+            return a;
+        } else {
+            return b;
+        }
+    }
 }
+
+

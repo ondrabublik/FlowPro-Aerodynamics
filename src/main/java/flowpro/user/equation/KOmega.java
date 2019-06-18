@@ -14,6 +14,8 @@ import java.util.Arrays;
 public class KOmega extends Aerodynamics {
 
     protected static final double P_TOL = 1e-1;
+    protected static final double K_TOL = 1e-8;
+    protected static final double OM_TOL = -1;
 
     double kIn;
     double omIn;
@@ -64,26 +66,6 @@ public class KOmega extends Aerodynamics {
             p = P_TOL * Math.exp((p - P_TOL) / P_TOL);
         }
         return p;
-    }
-
-    @Override
-    public void limitUnphysicalValues(double[] Ws, double[] W, int nBasis) { // limituje zaporne hodnoty
-        if (Ws[0] < RHO_TOL) {
-            for (int j = 0; j < nBasis; j++) {
-                W[j] = RHO_TOL;
-            }
-        }
-
-//        double momentum2 = .0;
-//        for (int d = 0; d < dim; ++d) {
-//            momentum2 += Ws[d+1] * Ws[d+1];
-//        }
-//        double Ek = momentum2 / (2 * Ws[0]);
-//        if (Ws[dim+1] < Ek) {
-//            for (int j = 0; j < nBasis; j++) {
-//                W[j][dim+1] = Ek;
-//            }
-//        }
     }
 
     @Override
@@ -167,9 +149,9 @@ public class KOmega extends Aerodynamics {
                     V += elem.meshVelocity[d] * n[d];
                 }
                 f[dim + 1] = p * V;
-                
+
                 for (int j = 0; j < nEqs; j++) {
-                    f[j] += V*WR[j];
+                    f[j] += V * WR[j];
                 }
                 break;
 
@@ -233,7 +215,7 @@ public class KOmega extends Aerodynamics {
                         WR[d + 1] = WR[0] * u[d];
                     }
                     WR[dim + 1] = p / (kapa - 1) + WR[0] * absVelocity2 / 2;
-                    WR[dim + 2] = 0;
+                    WR[dim + 2] = K_TOL;
                     WR[dim + 3] = WL[dim + 3];
                     break;
                 }
@@ -293,6 +275,8 @@ public class KOmega extends Aerodynamics {
 
     @Override
     public double[] diffusiveFlux(double[] W, double[] dW, double[] n, ElementData elem) {
+        //double[] Wavg = elem.Wavg;
+        
         W[0] = limiteRho(W[0]);
         double rho = W[0];
 
@@ -336,24 +320,23 @@ public class KOmega extends Aerodynamics {
             stress[dim * d + d] += lam * trace;
         }
 
-        double k = W[dim + 2] / rho;
-        double om = W[dim + 3] / rho;
+        double om = limiteOm(W[dim + 3] / rho);
         double mut = max(0, W[dim + 2] / Math.exp(om));
 
         double[] turbulentStress = new double[dim * dim];
         for (int i = 0; i < stress.length; i++) {
             turbulentStress[i] = stress[i] * mut;
         }
-        double kMax = 2.0 / 3 * max(0, W[dim + 2]);
+        double rho_k_limited = 2.0 / 3 * max(0, W[dim + 2]);
         for (int d = 0; d < dim; ++d) {
-            turbulentStress[dim * d + d] -= kMax;
+            turbulentStress[dim * d + d] -= rho_k_limited;
         }
 
         double[] kDer = new double[dim];
         double[] omDer = new double[dim];
         for (int d = 0; d < dim; ++d) {
-            kDer[d] = (dW[d * nEqs + dim + 2] - dW[d * nEqs] * k) / rho;
-            omDer[d] = (dW[d * nEqs + dim + 3] - dW[d * nEqs] * om) / rho;
+            kDer[d] = (dW[d * nEqs + dim + 2] - dW[d * nEqs] * (W[dim + 2] / rho)) / rho;
+            omDer[d] = (dW[d * nEqs + dim + 3] - dW[d * nEqs] * (W[dim + 3] / rho)) / rho;
         }
 
         double constant = kapa / (kapa - 1) * (1 / Pr + mut / Prt);
@@ -411,8 +394,8 @@ public class KOmega extends Aerodynamics {
             }
         }
 
-        double k = W[dim + 2] / rho;
-        double om = W[dim + 3] / rho;
+        double k = limiteK(W[dim + 2] / rho);
+        double om = limiteOm(W[dim + 3] / rho);
         double expOm = Math.exp(om);
         double mut = max(0, W[dim + 2] / expOm);
 
@@ -425,14 +408,14 @@ public class KOmega extends Aerodynamics {
                 turbulentStress[dim * d + f] = mut * (velocityJac[dim * d + f] + velocityJac[dim * f + d]);
             }
         }
-        double kMax = 2.0 / 3 * max(0, W[dim + 2]);
+        double rho_k_limited = 2.0 / 3 * max(0, W[dim + 2]);
         for (int d = 0; d < dim; ++d) {
-            turbulentStress[dim * d + d] += mut * lam * trace - kMax;
+            turbulentStress[dim * d + d] += mut * lam * trace - rho_k_limited;
         }
 
         double omDerSqr = 0;
         for (int d = 0; d < dim; ++d) {
-            double omDer = (dW[d * nEqs + dim + 3] - dW[d * nEqs] * om) / rho;
+            double omDer = (dW[d * nEqs + dim + 3] - dW[d * nEqs] * (W[dim + 3] / rho)) / rho;
             omDerSqr += omDer * omDer;
         }
 
@@ -442,22 +425,46 @@ public class KOmega extends Aerodynamics {
                 Tv += turbulentStress[dim * d + f] * velocityJac[dim * d + f];
             }
         }
+        double Tvom = aom / k * Tv;
 
         if (Tv > 10 * bk * rho * k * expOm) {
             Tv = 10 * bk * rho * k * expOm;
         }
 
-        double Tvom = aom / max(1e-8, k) * Tv;
         if (Tvom > 100 * bom * rho * expOm) {
             Tvom = 100 * bom * rho * expOm;
         }
 
         double[] source = new double[nEqs];
-        source[dim + 2] = max(Tv - bk * rho * k * expOm,0);
-        source[dim + 3] = max(Tvom - bom * rho * expOm + 1 / Re * (1 + som * mut) * omDerSqr,0);
+        source[dim + 2] = max(Tv - bk * rho * k * expOm, -rho * k) - min(10 * W[dim + 2], 0);
+        source[dim + 3] = max(Tvom - bom * rho * expOm + 1 / Re * (1 + som * mut) * omDerSqr, -bom * rho * expOm);
         return source;
     }
 
+    public double limiteK(double k) {
+        if (k < K_TOL) {
+            return K_TOL * Math.exp((k - K_TOL) / K_TOL);
+        } else {
+            return k;
+        }
+    }
+
+    public double limiteOm(double om) {
+        if (om < OM_TOL) {
+            return OM_TOL * Math.exp((om - OM_TOL) / OM_TOL);
+        } else {
+            return om;
+        }
+    }
+
+    @Override
+    public double[] combineShockSensors(double[] shock){
+        for(int m = 1; m < nEqs; m++){
+            shock[m] = shock[0]; // Navier-stokes shock sensors are acording density
+        }
+        return shock;
+    }
+    
     @Override
     public double[] getResults(double[] W, double[] dW, double[] X, String name) {
         switch (name.toLowerCase()) {
@@ -470,15 +477,15 @@ public class KOmega extends Aerodynamics {
 
             case "energy":
                 return new double[]{pRef * W[dim + 1]};
-                
+
             case "k":
                 return new double[]{W[dim + 2] / W[0]};
 
             case "omega":
                 return new double[]{W[dim + 3] / W[0]};
 
-            case "turbulentviscosity":
-                return new double[]{W[dim + 2] / Math.exp(W[dim + 3] / W[0]) / Re};
+            case "mut":
+                return new double[]{W[dim + 2] / Math.exp(W[dim + 3] / W[0])};
 
             default:
                 return super.getResults(W, dW, X, name);
@@ -487,6 +494,14 @@ public class KOmega extends Aerodynamics {
 
     public double max(double a, double b) {
         if (a > b) {
+            return a;
+        } else {
+            return b;
+        }
+    }
+
+    public double min(double a, double b) {
+        if (a < b) {
             return a;
         } else {
             return b;

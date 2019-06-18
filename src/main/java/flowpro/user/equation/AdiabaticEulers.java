@@ -27,15 +27,6 @@ public class AdiabaticEulers extends Aerodynamics {
     }
 
     @Override
-    public void limitUnphysicalValues(double[] Ws, double[] W, int nBasis) { // limituje zaporne hodnoty
-        if (Ws[0] < RHO_TOL) {
-            for (int j = 0; j < nBasis; j++) {
-                W[j] = RHO_TOL;
-            }
-        }
-    }
-
-    @Override
     public double[] boundaryValue(double[] WL, double[] n, int TT, ElementData elem) {
         WL[0] = limiteRho(WL[0]);
         double[] WR = new double[nEqs];
