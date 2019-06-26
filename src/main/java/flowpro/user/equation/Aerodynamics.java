@@ -244,41 +244,36 @@ public abstract class Aerodynamics implements Equation {
         }        
 
         // parameters for the viscous flow
-        double ReInf = -1;
+        double trueRe = -1;
         if (isDiffusive) {
+            // far-field Reynolds
+            double machInf = Math.sqrt(2 / (kapa - 1) * (Math.pow((pIn0 / pOut), (kapa - 1) / kapa) - 1));           
+            double rhoInf = rhoRef / stagnationStaticDensityRatio(machInf);
+            double pInf = pRef / stagnationStaticPressureRatio(machInf);
+            double aInf = Math.sqrt(kapa * pInf / rhoInf);
+            double uInf = machInf * aInf;
+//            double rhoInf = rhoIn0 / stagnationStaticDensityRatio(machInf);
+//            double aInf = Math.sqrt(kapa * pOut / rhoInf);
+//            double uInf = machInf * aInf;
+//            ReInf = Re * rhoInf * uInf;
+            
             if (props.containsKey("reynolds") && props.containsKey("prandtl")
                     && !props.containsKey("viscosity") && !props.containsKey("conductivity")) {
 
-                Re = props.getDouble("reynolds");
+                trueRe = props.getDouble("reynolds");
+                Re = trueRe * (rhoRef * velocityRef) / (rhoInf * uInf);
                 Pr = props.getDouble("prandtl");
             } else if (props.containsKey("viscosity") && props.containsKey("conductivity")) {
-                if (!props.containsKey("cp")) {
-                    throw new IOException("heat capacity cp needs to be specified "
-                            + " in order to calculate the prandtl number");
-                }
                 double viscosity = props.getDouble("viscosity");
                 double conductivity = props.getDouble("conductivity");
 
                 Pr = cp * viscosity / conductivity;
                 Re = rhoRef * velocityRef * lRef / viscosity;
+                trueRe = rhoInf * uInf * lRef / viscosity;
             } else {
                 throw new IOException("either the Prandtl and Reynolds numbers, "
                         + "or dynamic viscosity and thermal conductivity must be specified");
-            }
-
-            // far-field Reynolds
-            double machInf = Math.sqrt(2 / (kapa - 1) * (Math.pow((pIn0 / pOut), (kapa - 1) / kapa) - 1));
-            
-            double rhoInf = rhoRef / stagnationStaticDensityRatio(machInf);
-            double pInf = pRef / stagnationStaticPressureRatio(machInf);
-            double aInf = Math.sqrt(kapa * pInf / rhoInf);
-            double uInf = machInf * aInf;
-            ReInf = Re * (rhoInf * uInf) / (rhoRef * velocityRef);
-            
-//            double rhoInf = rhoIn0 / stagnationStaticDensityRatio(machInf);
-//            double aInf = Math.sqrt(kapa * pOut / rhoInf);
-//            double uInf = machInf * aInf;
-//            ReInf = Re * rhoInf * uInf;            
+            }                        
         } else {
             Re = -1;  // temporarely
             Pr = -1;
@@ -291,11 +286,10 @@ public abstract class Aerodynamics implements Equation {
         }
 
         System.out.println("---- notable physical parameters: ----");
-        System.out.printf("heat capacity ratio          %.3f\n", kapa);
+        System.out.printf("heat capacity ratio %.3f\n", kapa);
         if (isDiffusive) {
-            System.out.printf("stagnation Reynolds number   %.3e\n", Re);
-            System.out.printf("far-field Reynolds number    %.3e\n", ReInf);
-            System.out.printf("Prandtl number               %.3f\n", Pr);
+            System.out.printf("Reynolds number     %.3e\n", trueRe);
+            System.out.printf("Prandtl number      %.3f\n", Pr);
         }
         System.out.println("--------------------------------------");
     }
