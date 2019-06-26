@@ -38,7 +38,7 @@ public abstract class Aerodynamics implements Equation {
 
     // inlet boundary condition
     protected boolean isInletSupersonic;
-    // subsonic inlet boundary condition 
+    // subsonic inlet boundary condition
     protected final double pIn0 = 1; // static pressure
     protected final double rhoIn0 = 1; // static density
     protected double[] attackAngle; // angle of attack       
@@ -126,7 +126,7 @@ public abstract class Aerodynamics implements Equation {
         // inlet type
         isInletSupersonic = props.getBoolean("isInletSupersonic");
 
-        // reference values from inlet
+        // inlet and outlet
         if (isInletSupersonic) {
             pRef = props.getDouble("pIn");
 
@@ -139,17 +139,44 @@ public abstract class Aerodynamics implements Equation {
                 throw new IOException("either temperature or density "
                         + "must be prescribed at the inlet");
             }
-        } else {
-            pRef = props.getDouble("pIn0");
+        } else { // subsonic inlet
+            boolean farFieldBC = props.containsKey("pInf") && props.containsKey("machInf")
+                    && (props.containsKey("TInf") ^ props.containsKey("rhoInf"));
+            boolean stagnationBC = props.containsKey("pIn0") && props.containsKey("pOut")
+                    && (props.containsKey("TIn0") ^ props.containsKey("rhoIn0"));
+            if (farFieldBC && !stagnationBC) {
+                double pInf = props.getDouble("pInf");
+                double machInf = props.getDouble("machInf");
+                double rhoInf;
+                if (props.containsKey("rhoInf")) {
+                    rhoInf = props.getDouble("rhoInf");
+                } else {
+                    double TInf = props.getDouble("TInf");
+                    rhoInf = pInf / (cv * (kapa - 1) * TInf);
+                }
+                
+                pRef = pInf * stagnationStaticPressureRatio(machInf);
+                rhoRef = rhoInf * stagnationStaticDensityRatio(machInf);
+                
+                // outlet
+                pOut = pIn0 / stagnationStaticPressureRatio(machInf);                
+            } else if (stagnationBC && !farFieldBC) {
+                pRef = props.getDouble("pIn0");
 
-            if (props.containsKey("rhoIn0")) {
-                rhoRef = props.getDouble("rhoIn0");
-            } else if (props.containsKey("TIn0")) {
-                double TIn0 = props.getDouble("TIn0");
-                rhoRef = pRef / (cv * (kapa - 1) * TIn0);
+                if (props.containsKey("rhoIn0")) {
+                    rhoRef = props.getDouble("rhoIn0");
+                } else if (props.containsKey("TIn0")) {
+                    double TIn0 = props.getDouble("TIn0");
+                    rhoRef = pRef / (cv * (kapa - 1) * TIn0);
+                } else {
+                    throw new IOException("either temperature or density "
+                            + "must be prescribed at the inlet");
+                }
+                
+                pOut = props.getDouble("pOut") / pRef;
             } else {
-                throw new IOException("either temperature or density "
-                        + "must be prescribed at the inlet");
+                throw new IOException("either stagnation boundary conditions (pOut, pIn0 and rhoIn0 or TIn0) or "
+                            + "far-field boundary conditions (machInf, pInf and rhoInf or TInf) must be prescribed");
             }
         }
 
@@ -214,19 +241,7 @@ public abstract class Aerodynamics implements Equation {
             }
         } else {
             WIn[0] = -1;   // temporarely                
-        }
-
-        // outlet
-        if (props.containsKey("pOut")) {
-            pOut = props.getDouble("pOut") / pRef;
-        } else if (props.containsKey("machInf")) {
-            double machInf = props.getDouble("machInf");
-            pOut = 1 / Math.pow((1 + (kapa - 1) / 2 * machInf * machInf), (kapa / (kapa - 1)));
-        } else if (isInletSupersonic) {
-            pOut = 0;  // should not be used during computation
-        } else {
-            throw new IOException("outlet boundary condition is not specified");
-        }
+        }        
 
         // parameters for the viscous flow
         double ReInf = -1;
@@ -251,11 +266,19 @@ public abstract class Aerodynamics implements Equation {
                         + "or dynamic viscosity and thermal conductivity must be specified");
             }
 
-            // far field Reynolds
-            double machInf = Math.sqrt(2 / (kapa - 1) * (Math.pow((1 / pOut), (kapa - 1) / kapa) - 1));
-            double rhoInf = Math.pow(1 + ((kapa - 1) / 2) * machInf * machInf, 1 / (1 - kapa));
-            double uInf = machInf * Math.sqrt((kapa * pOut) / rhoInf);
-            ReInf = rhoInf * uInf * lRef / (rhoRef * velocityRef * lRef / Re);
+            // far-field Reynolds
+            double machInf = Math.sqrt(2 / (kapa - 1) * (Math.pow((pIn0 / pOut), (kapa - 1) / kapa) - 1));
+            
+            double rhoInf = rhoRef / stagnationStaticDensityRatio(machInf);
+            double pInf = pRef / stagnationStaticPressureRatio(machInf);
+            double aInf = Math.sqrt(kapa * pInf / rhoInf);
+            double uInf = machInf * aInf;
+            ReInf = Re * (rhoInf * uInf) / (rhoRef * velocityRef);
+            
+//            double rhoInf = rhoIn0 / stagnationStaticDensityRatio(machInf);
+//            double aInf = Math.sqrt(kapa * pOut / rhoInf);
+//            double uInf = machInf * aInf;
+//            ReInf = Re * rhoInf * uInf;            
         } else {
             Re = -1;  // temporarely
             Pr = -1;
@@ -268,13 +291,21 @@ public abstract class Aerodynamics implements Equation {
         }
 
         System.out.println("---- notable physical parameters: ----");
-        System.out.println("heat capacity ratio          " + kapa);
+        System.out.printf("heat capacity ratio          %.3f\n", kapa);
         if (isDiffusive) {
             System.out.printf("stagnation Reynolds number   %.3e\n", Re);
             System.out.printf("far-field Reynolds number    %.3e\n", ReInf);
             System.out.printf("Prandtl number               %.3f\n", Pr);
         }
         System.out.println("--------------------------------------");
+    }
+    
+    protected double stagnationStaticPressureRatio(double mach) {
+        return Math.pow(1 + (kapa - 1) / 2 * mach * mach, kapa / (kapa - 1));
+    }
+    
+    protected double stagnationStaticDensityRatio(double mach) {
+        return Math.pow(1 + (kapa - 1) / 2 * mach * mach, 1 / (kapa - 1));
     }
 
     @Override
@@ -380,40 +411,40 @@ public abstract class Aerodynamics implements Equation {
                 }
                 return velocity;
                 
-//            case "vorticity":
-//                if (dim == 2) {
-//                    double dvdx = (dW[2] * W[0] - W[2] * dW[0]) / (W[0]*W[0]);
-//                    double dudy = (dW[nEqs + 1] * W[0] - W[1] * dW[nEqs]) / (W[0]*W[0]);
-//                    return new double[] {velocityRef / lRef * (dvdx - dudy)};                
-//                } else {
-//                    throw new UnsupportedOperationException("quantity \"" + name
-//                            + "\" is only available in two dimensions");
-//                }
+            case "vorticity":
+                if (dim == 2) {
+                    double dvdx = (dW[2] * W[0] - W[2] * dW[0]) / (W[0]*W[0]);
+                    double dudy = (dW[nEqs + 1] * W[0] - W[1] * dW[nEqs]) / (W[0]*W[0]);
+                    return new double[] {velocityRef / lRef * (dvdx - dudy)};                
+                } else {
+                    throw new UnsupportedOperationException("quantity \"" + name
+                            + "\" is only available in two dimensions");
+                }
 
             case "pressure":
                 return new double[]{pRef * pressure(W)};
 
-            case "vorticity":
-                double rho = W[0];
-                double[] velocityAux = new double[dim];
-                for (int d = 0; d < dim; ++d) {
-                    velocityAux[d] = W[d + 1] / rho;
-                }
-                double[] velocityJac = new double[dim * dim];
-                for (int d = 0; d < dim; ++d) {
-                    for (int f = 0; f < dim; ++f) {
-                        velocityJac[dim * d + f] = (dW[f * nEqs + d + 1] - dW[f * nEqs] * velocityAux[d]) / rho;
-                    }
-                }
-                switch (dim) {
-                    case 2:
-                        return new double[]{0, 0, velocityJac[dim * 1 + 0] - velocityJac[dim * 0 + 1]};
-                    case 3:
-                        return new double[]{velocityJac[dim * 2 + 1] - velocityJac[dim * 1 + 2], velocityJac[dim * 0 + 2] - velocityJac[dim * 2 + 0], velocityJac[dim * 1 + 0] - velocityJac[dim * 0 + 1]};
-                    default:
-                        throw new UnsupportedOperationException("quantity \"" + name
-                                + "\" is not available in one dimension");
-        }
+//            case "vorticity":
+//                double rho = W[0];
+//                double[] velocityAux = new double[dim];
+//                for (int d = 0; d < dim; ++d) {
+//                    velocityAux[d] = W[d + 1] / rho;
+//                }
+//                double[] velocityJac = new double[dim * dim];
+//                for (int d = 0; d < dim; ++d) {
+//                    for (int f = 0; f < dim; ++f) {
+//                        velocityJac[dim * d + f] = (dW[f * nEqs + d + 1] - dW[f * nEqs] * velocityAux[d]) / rho;
+//                    }
+//                }
+//                switch (dim) {
+//                    case 2:
+//                        return new double[]{0, 0, velocityJac[dim * 1 + 0] - velocityJac[dim * 0 + 1]};
+//                    case 3:
+//                        return new double[]{velocityJac[dim * 2 + 1] - velocityJac[dim * 1 + 2], velocityJac[dim * 0 + 2] - velocityJac[dim * 2 + 0], velocityJac[dim * 1 + 0] - velocityJac[dim * 0 + 1]};
+//                    default:
+//                        throw new UnsupportedOperationException("quantity \"" + name
+//                                + "\" is not available in one dimension");
+//                }
             default:
                 throw new UnsupportedOperationException("unknown quantity \"" + name + "\"");
         }
