@@ -244,8 +244,20 @@ public class SpalartAllmaras extends Aerodynamics {
                     double E = p / (kapa - 1) + 0.5 * rhoIn * normalVelocity * normalVelocity;
 
                     WR[0] = rhoIn;
-                    for (int d = 0; d < dim; ++d) {
-                        WR[d + 1] = -rhoIn * normalVelocity * n[d];
+                    if (attackAngle == null) {
+                        for (int d = 0; d < dim; ++d) {
+                            WR[d + 1] = -rhoIn * normalVelocity * n[d];
+                        }
+                    } else {
+                        double[] dir;
+                        if (dim == 2) {
+                            dir = new double[]{Math.cos(attackAngle[0]), Math.sin(attackAngle[0])};
+                        } else {
+                            dir = new double[]{Math.cos(attackAngle[0]) * Math.cos(attackAngle[1]), Math.sin(attackAngle[0]) * Math.cos(attackAngle[1]), Math.sin(attackAngle[1])};
+                        }
+                        for (int d = 0; d < dim; ++d) {
+                            WR[d + 1] = rhoIn * normalVelocity * dir[d];
+                        }
                     }
                     WR[dim + 1] = E;
                     WR[dim + 2] = rhoIn * vtIn;
@@ -450,7 +462,7 @@ public class SpalartAllmaras extends Aerodynamics {
                 return new double[]{pRef * W[dim + 1]};
                         
             case "mut":
-                double xi = max(W[dim+2],0); // vt/v
+                double xi = max(W[dim + 2],0); // vt/v
                 double fv1 = xi * xi * xi / (xi * xi * xi + cv1 * cv1 * cv1);
                 return new double[]{W[dim + 2]*fv1};
 
