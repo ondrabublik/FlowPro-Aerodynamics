@@ -53,6 +53,9 @@ public abstract class Aerodynamics implements Equation {
 
     // time and time step
     protected double t, dt;
+	
+	
+//	abstract public double pressure(double[] W);
 
     @Override
     public void setState(double dt, double t) {
@@ -99,6 +102,18 @@ public abstract class Aerodynamics implements Equation {
     public double[] sourceTermJacobian(double[] W, double[] dW, ElementData elemData) {
         throw new UnsupportedOperationException("operation not supported");
     }
+	
+	@Override
+	public double[] normalStress(double[] W, double[] dW, double[] normal) {	
+		double p = pressure(W);
+		
+		double[] normalStress = new double[dim];
+		for (int d = 0; d < dim; ++d) {
+			normalStress[d] -= p * normal[d];
+		}
+		
+		return normalStress;
+	}
 
     public void init(FlowProProperties props, int dim, int nEqs, boolean isDiffusive) throws IOException {
         this.nEqs = nEqs;
