@@ -37,7 +37,7 @@ public class NavierStokes extends Aerodynamics {
     }
 	
 	@Override
-	public double[] normalStress(double[] W, double[] dW, double[] normal) {
+	public double[] stressVector(double[] W, double[] dW, double[] normal) {
 		if (isDiffusive) {		
 			double rho = W[0];
 
@@ -68,17 +68,17 @@ public class NavierStokes extends Aerodynamics {
 
 			double p = pressure(W);
 
-			double[] normalStress = new double[dim];
+			double[] stressVector = new double[dim];
 			for (int d = 0; d < dim; ++d) {
-				normalStress[d] -= p * normal[d];
+				stressVector[d] -= p * normal[d];
 				for (int f = 0; f < dim; ++f) {
-					normalStress[d] += 1 / Re * stress[dim * d + f] * normal[f];
+					stressVector[d] += 1 / Re * stress[dim * d + f] * normal[f];
 				}
 			}
 
-			return normalStress;
+			return stressVector;
 		} else {
-			return super.normalStress(W, dW, normal);
+			return super.stressVector(W, dW, normal);
 		}
 	}
 
@@ -93,11 +93,6 @@ public class NavierStokes extends Aerodynamics {
         output.setProperty("t", Double.toString(tRef));
 
         output.store(new FileOutputStream(filePath), null);
-    }
-
-    @Override
-    public double[] getReferenceValues() {
-        return new double[]{lRef, pRef, rhoRef, velocityRef, tRef};
     }
 
     @Override

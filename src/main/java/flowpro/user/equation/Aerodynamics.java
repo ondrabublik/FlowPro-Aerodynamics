@@ -104,15 +104,15 @@ public abstract class Aerodynamics implements Equation {
     }
 	
 	@Override
-	public double[] normalStress(double[] W, double[] dW, double[] normal) {	
+	public double[] stressVector(double[] W, double[] dW, double[] normal) {	
 		double p = pressure(W);
 		
-		double[] normalStress = new double[dim];
+		double[] stressVector = new double[dim];
 		for (int d = 0; d < dim; ++d) {
-			normalStress[d] -= p * normal[d];
+			stressVector[d] -= p * normal[d];
 		}
 		
-		return normalStress;
+		return stressVector;
 	}
 
     public void init(FlowProProperties props, int dim, int nEqs, boolean isDiffusive) throws IOException {
