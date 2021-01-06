@@ -35,52 +35,52 @@ public class NavierStokes extends Aerodynamics {
         }
         return p;
     }
-	
-	@Override
-	public double[] normalStress(double[] W, double[] dW, double[] normal) {
-		if (isDiffusive) {		
-			double rho = W[0];
 
-			double[] velocity = new double[dim];
-			for (int d = 0; d < dim; ++d) {
-				velocity[d] = W[d + 1] / rho;
-			}
+    @Override
+    public double[] stressVector(double[] W, double[] dW, double[] normal) {
+        if (isDiffusive) {
+            double rho = W[0];
 
-			double[] velocityJac = new double[dim * dim];
-			for (int d = 0; d < dim; ++d) {
-				for (int f = 0; f < dim; ++f) {
-					velocityJac[dim * d + f] = (dW[f * nEqs + d + 1] - dW[f * nEqs] * velocity[d]) / rho;
-				}
-			}
+            double[] velocity = new double[dim];
+            for (int d = 0; d < dim; ++d) {
+                velocity[d] = W[d + 1] / rho;
+            }
 
-			double[] stress = new double[dim * dim];
-			double trace = .0;
-			for (int d = 0; d < dim; ++d) {
-				trace += velocityJac[dim * d + d];
-				for (int f = 0; f < dim; ++f) {
-					stress[dim * d + f] = velocityJac[dim * d + f] + velocityJac[dim * f + d];
-				}
-			}
-			double lam = -2. / 3; // Stokesuv vztah
-			for (int d = 0; d < dim; ++d) {
-				stress[dim * d + d] += lam * trace;
-			}
+            double[] velocityJac = new double[dim * dim];
+            for (int d = 0; d < dim; ++d) {
+                for (int f = 0; f < dim; ++f) {
+                    velocityJac[dim * d + f] = (dW[f * nEqs + d + 1] - dW[f * nEqs] * velocity[d]) / rho;
+                }
+            }
 
-			double p = pressure(W);
+            double[] stress = new double[dim * dim];
+            double trace = .0;
+            for (int d = 0; d < dim; ++d) {
+                trace += velocityJac[dim * d + d];
+                for (int f = 0; f < dim; ++f) {
+                    stress[dim * d + f] = velocityJac[dim * d + f] + velocityJac[dim * f + d];
+                }
+            }
+            double lam = -2. / 3; // Stokesuv vztah
+            for (int d = 0; d < dim; ++d) {
+                stress[dim * d + d] += lam * trace;
+            }
 
-			double[] normalStress = new double[dim];
-			for (int d = 0; d < dim; ++d) {
-				normalStress[d] -= p * normal[d];
-				for (int f = 0; f < dim; ++f) {
-					normalStress[d] += 1 / Re * stress[dim * d + f] * normal[f];
-				}
-			}
+            double p = pressure(W);
 
-			return normalStress;
-		} else {
-			return super.normalStress(W, dW, normal);
-		}
-	}
+            double[] normalStress = new double[dim];
+            for (int d = 0; d < dim; ++d) {
+                normalStress[d] -= p * normal[d];
+                for (int f = 0; f < dim; ++f) {
+                    normalStress[d] += 1 / Re * stress[dim * d + f] * normal[f];
+                }
+            }
+
+            return normalStress;
+        } else {
+            return super.stressVector(W, dW, normal);
+        }
+    }
 
     @Override
     public void saveReferenceValues(String filePath) throws IOException {
@@ -471,92 +471,229 @@ public class NavierStokes extends Aerodynamics {
     @Override
     public double[] convectiveFluxJacobian(double[] W, double[] n, ElementData elemData) {
         double[] a = new double[nEqs * nEqs];
-        double r = W[0];
-        double u = W[1] / r;
-        double v = W[2] / r;
-        double E = W[3];
-        double q = u * u + v * v;
-        double p = (kapa - 1) * (E - r * q / 2);
-        double nx = n[0];
-        double ny = n[1];
-        double Vn = u * nx + v * ny;
+        if (dim == 2) {
+            double r = W[0];
+            double u = W[1] / r;
+            double v = W[2] / r;
+            double E = W[3];
+            double q = u * u + v * v;
+            double p = (kapa - 1) * (E - r * q / 2);
+            double nx = n[0];
+            double ny = n[1];
+            double Vn = u * nx + v * ny;
 
-        a[0] = 0;
-        a[1] = nx;
-        a[2] = ny;
-        a[3] = 0;
-        a[4] = -u * Vn + 0.5 * (kapa - 1) * q * nx;
-        a[5] = u * nx + Vn - (kapa - 1) * u * nx;
-        a[6] = u * ny - (kapa - 1) * v * nx;
-        a[7] = (kapa - 1) * nx;
-        a[8] = -v * Vn + 0.5 * (kapa - 1) * q * ny;
-        a[9] = v * nx - (kapa - 1) * u * ny;
-        a[10] = v * ny + Vn - (kapa - 1) * v * ny;
-        a[11] = (kapa - 1) * ny;
-        a[12] = -1 / r * Vn * (E + p) + 0.5 * Vn * (kapa - 1) * q;
-        a[13] = 1 / r * nx * (E + p) - u * Vn * (kapa - 1);
-        a[14] = 1 / r * ny * (E + p) - v * Vn * (kapa - 1);
-        a[15] = Vn * kapa;
+            a[0] = 0;
+            a[1] = nx;
+            a[2] = ny;
+            a[3] = 0;
+            a[4] = -u * Vn + 0.5 * (kapa - 1) * q * nx;
+            a[5] = u * nx + Vn - (kapa - 1) * u * nx;
+            a[6] = u * ny - (kapa - 1) * v * nx;
+            a[7] = (kapa - 1) * nx;
+            a[8] = -v * Vn + 0.5 * (kapa - 1) * q * ny;
+            a[9] = v * nx - (kapa - 1) * u * ny;
+            a[10] = v * ny + Vn - (kapa - 1) * v * ny;
+            a[11] = (kapa - 1) * ny;
+            a[12] = -1 / r * Vn * (E + p) + 0.5 * Vn * (kapa - 1) * q;
+            a[13] = 1 / r * nx * (E + p) - u * Vn * (kapa - 1);
+            a[14] = 1 / r * ny * (E + p) - v * Vn * (kapa - 1);
+            a[15] = Vn * kapa;
+        }
+
+        if (dim == 3) {
+            a[0] = 0;
+            a[1] = n[0];
+            a[2] = n[1];
+            a[3] = n[2];
+            a[4] = 0;
+            a[5] = -(3 * n[0] * (W[1] * W[1]) + n[0] * (W[2] * W[2]) + n[0] * (W[3] * W[3]) - kapa * n[0] * (W[1] * W[1]) - kapa * n[0] * (W[2] * W[2]) - kapa * n[0] * (W[3] * W[3]) + 2 * n[1] * W[1] * W[2] + 2 * n[2] * W[1] * W[3]) / (2 * (W[0] * W[0]));
+            a[6] = (3 * n[0] * W[1] + n[1] * W[2] + n[2] * W[3] - kapa * n[0] * W[1]) / W[0];
+            a[7] = (n[1] * W[1]) / W[0] - (n[0] * W[2] * (kapa - 1)) / W[0];
+            a[8] = (n[2] * W[1]) / W[0] - (n[0] * W[3] * (kapa - 1)) / W[0];
+            a[9] = n[0] * (kapa - 1);
+            a[10] = -(n[1] * (W[1] * W[1]) + 3 * n[1] * (W[2] * W[2]) + n[1] * (W[3] * W[3]) - kapa * n[1] * (W[1] * W[1]) - kapa * n[1] * (W[2] * W[2]) - kapa * n[1] * (W[3] * W[3]) + 2 * n[0] * W[1] * W[2] + 2 * n[2] * W[2] * W[3]) / (2 * (W[0] * W[0]));
+            a[11] = (n[0] * W[2]) / W[0] - (n[1] * W[1] * (kapa - 1)) / W[0];
+            a[12] = (n[0] * W[1] + 3 * n[1] * W[2] + n[2] * W[3] - kapa * n[1] * W[2]) / W[0];
+            a[13] = (n[2] * W[2]) / W[0] - (n[1] * W[3] * (kapa - 1)) / W[0];
+            a[14] = n[1] * (kapa - 1);
+            a[15] = -(n[2] * (W[1] * W[1]) + n[2] * (W[2] * W[2]) + 3 * n[2] * (W[3] * W[3]) - kapa * n[2] * (W[1] * W[1]) - kapa * n[2] * (W[2] * W[2]) - kapa * n[2] * (W[3] * W[3]) + 2 * n[0] * W[1] * W[3] + 2 * n[1] * W[2] * W[3]) / (2 * (W[0] * W[0]));
+            a[16] = (n[0] * W[3]) / W[0] - (n[2] * W[1] * (kapa - 1)) / W[0];
+            a[17] = (n[1] * W[3]) / W[0] - (n[2] * W[2] * (kapa - 1)) / W[0];
+            a[18] = (n[0] * W[1] + n[1] * W[2] + 3 * n[2] * W[3] - kapa * n[2] * W[3]) / W[0];
+            a[19] = n[2] * (kapa - 1);
+            a[20] = -((n[0] * W[1] + n[1] * W[2] + n[2] * W[3]) * ((W[1] * W[1]) - kapa * (W[2] * W[2]) - kapa * (W[3] * W[3]) - kapa * (W[1] * W[1]) + (W[2] * W[2]) + (W[3] * W[3]) + kapa * W[0] * W[4])) / (W[0] * W[0] * W[0]);
+            a[21] = (n[0] * ((W[1] * W[1]) - kapa * (W[2] * W[2]) - kapa * (W[3] * W[3]) - kapa * (W[1] * W[1]) + (W[2] * W[2]) + (W[3] * W[3]) + 2 * kapa * W[0] * W[4])) / (2 * (W[0] * W[0])) - (W[1] * (kapa - 1) * (n[0] * W[1] + n[1] * W[2] + n[2] * W[3])) / (W[0] * W[0]);
+            a[22] = (n[1] * ((W[1] * W[1]) - kapa * (W[2] * W[2]) - kapa * (W[3] * W[3]) - kapa * (W[1] * W[1]) + (W[2] * W[2]) + (W[3] * W[3]) + 2 * kapa * W[0] * W[4])) / (2 * (W[0] * W[0])) - (W[2] * (kapa - 1) * (n[0] * W[1] + n[1] * W[2] + n[2] * W[3])) / (W[0] * W[0]);
+            a[23] = (n[2] * ((W[1] * W[1]) - kapa * (W[2] * W[2]) - kapa * (W[3] * W[3]) - kapa * (W[1] * W[1]) + (W[2] * W[2]) + (W[3] * W[3]) + 2 * kapa * W[0] * W[4])) / (2 * (W[0] * W[0])) - (W[3] * (kapa - 1) * (n[0] * W[1] + n[1] * W[2] + n[2] * W[3])) / (W[0] * W[0]);
+            a[24] = (kapa * (n[0] * W[1] + n[1] * W[2] + n[2] * W[3])) / W[0];
+        }
+        return a;
+
+    }
+
+    @Override
+    public double[] diffusiveFluxJacobian(double[] W, double[] dW, double n[], ElementData elemData
+    ) {
+        double[] a = new double[nEqs * nEqs * (dim + 1)];
+        if (dim == 2) {
+            a[0] = 0;
+            a[1] = 0;
+            a[2] = 0;
+            a[3] = 0;
+            a[4] = (8 * dW[0] * n[0] * W[1] - 4 * dW[1] * n[0] * W[0] + 6 * dW[0] * n[1] * W[2] - 4 * dW[nEqs] * n[0] * W[2] + 6 * dW[nEqs] * n[1] * W[1] - 3 * dW[nEqs + 1] * n[1] * W[0] - 3 * dW[2] * n[1] * W[0] + 2 * dW[nEqs + 2] * n[0] * W[0]) / (3 * Re * (W[0] * W[0] * W[0]));
+            a[5] = -(4 * dW[0] * n[0] + 3 * dW[nEqs] * n[1]) / (3 * Re * (W[0] * W[0]));
+            a[6] = -(3 * dW[0] * n[1] - 2 * dW[nEqs] * n[0]) / (3 * Re * (W[0] * W[0]));
+            a[7] = 0;
+            a[8] = (6 * dW[0] * n[0] * W[2] - 4 * dW[0] * n[1] * W[1] + 6 * dW[nEqs] * n[0] * W[1] + 2 * dW[1] * n[1] * W[0] - 3 * dW[nEqs + 1] * n[0] * W[0] - 3 * dW[2] * n[0] * W[0] + 8 * dW[nEqs] * n[1] * W[2] - 4 * dW[nEqs + 2] * n[1] * W[0]) / (3 * Re * (W[0] * W[0] * W[0]));
+            a[9] = (2 * dW[0] * n[1] - 3 * dW[nEqs] * n[0]) / (3 * Re * (W[0] * W[0]));
+            a[10] = -(3 * dW[0] * n[0] + 4 * dW[nEqs] * n[1]) / (3 * Re * (W[0] * W[0]));
+            a[11] = 0;
+            a[12] = (12 * Pr * dW[0] * n[0] * (W[1] * W[1]) + 9 * Pr * dW[0] * n[0] * (W[2] * W[2]) + 9 * Pr * dW[nEqs] * n[1] * (W[1] * W[1]) + 12 * Pr * dW[nEqs] * n[1] * (W[2] * W[2]) - 9 * dW[0] * kapa * n[0] * (W[1] * W[1]) - 9 * dW[0] * kapa * n[0] * (W[2] * W[2]) - 9 * dW[nEqs] * kapa * n[1] * (W[1] * W[1]) - 3 * dW[3] * kapa * n[0] * (W[0] * W[0]) - 9 * dW[nEqs] * kapa * n[1] * (W[2] * W[2]) - 3 * dW[nEqs + 3] * kapa * n[1] * (W[0] * W[0]) - 8 * Pr * dW[1] * n[0] * W[0] * W[1] + 3 * Pr * dW[0] * n[1] * W[1] * W[2] + 3 * Pr * dW[nEqs] * n[0] * W[1] * W[2] + 4 * Pr * dW[1] * n[1] * W[0] * W[2] - 6 * Pr * dW[nEqs + 1] * n[0] * W[0] * W[2] - 6 * Pr * dW[nEqs + 1] * n[1] * W[0] * W[1] - 6 * Pr * dW[2] * n[0] * W[0] * W[2] - 6 * Pr * dW[2] * n[1] * W[0] * W[1] + 4 * Pr * dW[nEqs + 2] * n[0] * W[0] * W[1] - 8 * Pr * dW[nEqs + 2] * n[1] * W[0] * W[2] + 6 * dW[1] * kapa * n[0] * W[0] * W[1] + 6 * dW[0] * kapa * n[0] * W[0] * W[3] + 6 * dW[nEqs + 1] * kapa * n[1] * W[0] * W[1] + 6 * dW[2] * kapa * n[0] * W[0] * W[2] + 6 * dW[nEqs] * kapa * n[1] * W[0] * W[3] + 6 * dW[nEqs + 2] * kapa * n[1] * W[0] * W[2]) / (3 * Pr * Re * (W[0] * W[0] * W[0] * W[0]));
+            a[13] = -(3 * dW[1] * kapa * n[0] * W[0] - 6 * dW[0] * kapa * n[0] * W[1] - 6 * dW[nEqs] * kapa * n[1] * W[1] + 3 * dW[nEqs + 1] * kapa * n[1] * W[0] + 8 * Pr * dW[0] * n[0] * W[1] - 4 * Pr * dW[1] * n[0] * W[0] + Pr * dW[0] * n[1] * W[2] + Pr * dW[nEqs] * n[0] * W[2] + 6 * Pr * dW[nEqs] * n[1] * W[1] - 3 * Pr * dW[nEqs + 1] * n[1] * W[0] - 3 * Pr * dW[2] * n[1] * W[0] + 2 * Pr * dW[nEqs + 2] * n[0] * W[0]) / (3 * Pr * Re * (W[0] * W[0] * W[0]));
+            a[14] = -(3 * dW[2] * kapa * n[0] * W[0] - 6 * dW[0] * kapa * n[0] * W[2] - 6 * dW[nEqs] * kapa * n[1] * W[2] + 3 * dW[nEqs + 2] * kapa * n[1] * W[0] + 6 * Pr * dW[0] * n[0] * W[2] + Pr * dW[0] * n[1] * W[1] + Pr * dW[nEqs] * n[0] * W[1] + 2 * Pr * dW[1] * n[1] * W[0] - 3 * Pr * dW[nEqs + 1] * n[0] * W[0] - 3 * Pr * dW[2] * n[0] * W[0] + 8 * Pr * dW[nEqs] * n[1] * W[2] - 4 * Pr * dW[nEqs + 2] * n[1] * W[0]) / (3 * Pr * Re * (W[0] * W[0] * W[0]));
+            a[15] = -(kapa * (dW[0] * n[0] + dW[nEqs] * n[1])) / (Pr * Re * (W[0] * W[0]));
+            a[16] = 0;
+            a[17] = 0;
+            a[18] = 0;
+            a[19] = 0;
+            a[20] = -(4 * n[0] * W[1] + 3 * n[1] * W[2]) / (3 * Re * (W[0] * W[0]));
+            a[21] = (4 * n[0]) / (3 * Re * W[0]);
+            a[22] = n[1] / (Re * W[0]);
+            a[23] = 0;
+            a[24] = -(3 * n[0] * W[2] - 2 * n[1] * W[1]) / (3 * Re * (W[0] * W[0]));
+            a[25] = -(2 * n[1]) / (3 * Re * W[0]);
+            a[26] = n[0] / (Re * W[0]);
+            a[27] = 0;
+            a[28] = -(4 * Pr * n[0] * (W[1] * W[1]) - 3 * kapa * n[0] * (W[2] * W[2]) - 3 * kapa * n[0] * (W[1] * W[1]) + 3 * Pr * n[0] * (W[2] * W[2]) + Pr * n[1] * W[1] * W[2] + 3 * kapa * n[0] * W[0] * W[3]) / (3 * Pr * Re * (W[0] * W[0] * W[0]));
+            a[29] = -(2 * Pr * n[1] * W[2] - 4 * Pr * n[0] * W[1] + 3 * kapa * n[0] * W[1]) / (3 * Pr * Re * (W[0] * W[0]));
+            a[30] = (Pr * n[0] * W[2] + Pr * n[1] * W[1] - kapa * n[0] * W[2]) / (Pr * Re * (W[0] * W[0]));
+            a[31] = (kapa * n[0]) / (Pr * Re * W[0]);
+            a[32] = 0;
+            a[33] = 0;
+            a[34] = 0;
+            a[35] = 0;
+            a[36] = (2 * n[0] * W[2] - 3 * n[1] * W[1]) / (3 * Re * (W[0] * W[0]));
+            a[37] = n[1] / (Re * W[0]);
+            a[38] = -(2 * n[0]) / (3 * Re * W[0]);
+            a[39] = 0;
+            a[40] = -(3 * n[0] * W[1] + 4 * n[1] * W[2]) / (3 * Re * (W[0] * W[0]));
+            a[41] = n[0] / (Re * W[0]);
+            a[42] = (4 * n[1]) / (3 * Re * W[0]);
+            a[43] = 0;
+            a[44] = -(3 * Pr * n[1] * (W[1] * W[1]) - 3 * kapa * n[1] * (W[2] * W[2]) - 3 * kapa * n[1] * (W[1] * W[1]) + 4 * Pr * n[1] * (W[2] * W[2]) + Pr * n[0] * W[1] * W[2] + 3 * kapa * n[1] * W[0] * W[3]) / (3 * Pr * Re * (W[0] * W[0] * W[0]));
+            a[45] = (Pr * n[0] * W[2] + Pr * n[1] * W[1] - kapa * n[1] * W[1]) / (Pr * Re * (W[0] * W[0]));
+            a[46] = -(2 * Pr * n[0] * W[1] - 4 * Pr * n[1] * W[2] + 3 * kapa * n[1] * W[2]) / (3 * Pr * Re * (W[0] * W[0]));
+            a[47] = (kapa * n[1]) / (Pr * Re * W[0]);
+        }
+        if (dim == 3) {
+            a[0] = 0;
+            a[1] = 0;
+            a[2] = 0;
+            a[3] = 0;
+            a[4] = 0;
+            a[5] = (8 * dW[0] * n[0] * W[1] - 4 * dW[1] * n[0] * W[0] + 6 * dW[0] * n[1] * W[2] - 4 * dW[nEqs] * n[0] * W[2] + 6 * dW[nEqs] * n[1] * W[1] - 3 * dW[nEqs + 1] * n[1] * W[0] - 3 * dW[2] * n[1] * W[0] + 2 * dW[nEqs + 2] * n[0] * W[0] + 6 * dW[0] * n[2] * W[2] - 4 * dW[2 * nEqs] * n[0] * W[2] + 6 * dW[2 * nEqs] * n[2] * W[1] - 3 * dW[2 * nEqs + 1] * n[2] * W[0] - 3 * dW[3] * n[2] * W[0] + 2 * dW[2 * nEqs + 3] * n[0] * W[0]) / (3 * Re * (W[0] * W[0] * W[0]));
+            a[6] = -(4 * dW[0] * n[0] + 3 * dW[nEqs] * n[1] + 3 * dW[2 * nEqs] * n[2]) / (3 * Re * (W[0] * W[0]));
+            a[7] = -(3 * dW[0] * n[1] - 2 * dW[nEqs] * n[0] + 3 * dW[0] * n[2] - 2 * dW[2 * nEqs] * n[0]) / (3 * Re * (W[0] * W[0]));
+            a[8] = 0;
+            a[9] = 0;
+            a[10] = (6 * dW[0] * n[0] * W[2] - 4 * dW[0] * n[1] * W[1] + 6 * dW[nEqs] * n[0] * W[1] + 2 * dW[1] * n[1] * W[0] - 3 * dW[nEqs + 1] * n[0] * W[0] - 3 * dW[2] * n[0] * W[0] + 8 * dW[nEqs] * n[1] * W[2] - 4 * dW[nEqs + 2] * n[1] * W[0] + 6 * dW[nEqs] * n[2] * W[2] - 4 * dW[2 * nEqs] * n[1] * W[2] + 6 * dW[2 * nEqs] * n[2] * W[2] - 3 * dW[2 * nEqs + 2] * n[2] * W[0] - 3 * dW[nEqs + 3] * n[2] * W[0] + 2 * dW[2 * nEqs + 3] * n[1] * W[0]) / (3 * Re * (W[0] * W[0] * W[0]));
+            a[11] = (2 * dW[0] * n[1] - 3 * dW[nEqs] * n[0]) / (3 * Re * (W[0] * W[0]));
+            a[12] = -(3 * dW[0] * n[0] + 4 * dW[nEqs] * n[1] + 3 * dW[nEqs] * n[2] - 2 * dW[2 * nEqs] * n[1] + 3 * dW[2 * nEqs] * n[2]) / (3 * Re * (W[0] * W[0]));
+            a[13] = 0;
+            a[14] = 0;
+            a[15] = (6 * dW[0] * n[0] * W[2] - 4 * dW[0] * n[2] * W[1] + 2 * dW[1] * n[2] * W[0] + 6 * dW[2 * nEqs] * n[0] * W[1] - 3 * dW[2 * nEqs + 1] * n[0] * W[0] - 3 * dW[3] * n[0] * W[0] + 6 * dW[nEqs] * n[1] * W[2] - 4 * dW[nEqs] * n[2] * W[2] + 6 * dW[2 * nEqs] * n[1] * W[2] + 2 * dW[nEqs + 2] * n[2] * W[0] - 3 * dW[2 * nEqs + 2] * n[1] * W[0] - 3 * dW[nEqs + 3] * n[1] * W[0] + 8 * dW[2 * nEqs] * n[2] * W[2] - 4 * dW[2 * nEqs + 3] * n[2] * W[0]) / (3 * Re * (W[0] * W[0] * W[0]));
+            a[16] = (2 * dW[0] * n[2] - 3 * dW[2 * nEqs] * n[0]) / (3 * Re * (W[0] * W[0]));
+            a[17] = -(3 * dW[0] * n[0] + 3 * dW[nEqs] * n[1] - 2 * dW[nEqs] * n[2] + 3 * dW[2 * nEqs] * n[1] + 4 * dW[2 * nEqs] * n[2]) / (3 * Re * (W[0] * W[0]));
+            a[18] = 0;
+            a[19] = 0;
+            a[20] = (12 * Pr * dW[0] * n[0] * (W[1] * W[1]) + 9 * Pr * dW[0] * n[0] * (W[2] * W[2]) + 9 * Pr * dW[nEqs] * n[1] * (W[1] * W[1]) + 12 * Pr * dW[nEqs] * n[1] * (W[2] * W[2]) + 9 * Pr * dW[nEqs] * n[2] * (W[2] * W[2]) - 6 * Pr * dW[2 * nEqs] * n[1] * (W[2] * W[2]) + 9 * Pr * dW[2 * nEqs] * n[2] * (W[1] * W[1]) + 9 * Pr * dW[2 * nEqs] * n[2] * (W[2] * W[2]) - 9 * dW[0] * kapa * n[0] * (W[1] * W[1]) - 9 * dW[0] * kapa * n[0] * (W[2] * W[2]) - 9 * dW[nEqs] * kapa * n[1] * (W[1] * W[1]) - 9 * dW[nEqs] * kapa * n[1] * (W[2] * W[2]) - 3 * dW[4] * kapa * n[0] * (W[0] * W[0]) - 9 * dW[2 * nEqs] * kapa * n[2] * (W[1] * W[1]) - 9 * dW[2 * nEqs] * kapa * n[2] * (W[2] * W[2]) - 3 * dW[nEqs + 4] * kapa * n[1] * (W[0] * W[0]) - 3 * dW[2 * nEqs + 4] * kapa * n[2] * (W[0] * W[0]) - 8 * Pr * dW[1] * n[0] * W[0] * W[1] + 3 * Pr * dW[0] * n[1] * W[1] * W[2] + 3 * Pr * dW[nEqs] * n[0] * W[1] * W[2] + 4 * Pr * dW[1] * n[1] * W[0] * W[2] - 6 * Pr * dW[nEqs + 1] * n[0] * W[0] * W[2] - 6 * Pr * dW[nEqs + 1] * n[1] * W[0] * W[1] - 6 * Pr * dW[2] * n[0] * W[0] * W[2] - 6 * Pr * dW[2] * n[1] * W[0] * W[1] + 4 * Pr * dW[nEqs + 2] * n[0] * W[0] * W[1] + 9 * Pr * dW[0] * n[0] * W[2] * W[3] + 9 * Pr * dW[0] * n[2] * W[1] * W[2] - 6 * Pr * dW[2 * nEqs] * n[0] * W[1] * W[2] - 6 * Pr * dW[0] * n[2] * W[1] * W[3] + 4 * Pr * dW[1] * n[2] * W[0] * W[3] + 9 * Pr * dW[2 * nEqs] * n[0] * W[1] * W[3] - 6 * Pr * dW[2 * nEqs + 1] * n[0] * W[0] * W[3] - 6 * Pr * dW[2 * nEqs + 1] * n[2] * W[0] * W[1] - 8 * Pr * dW[nEqs + 2] * n[1] * W[0] * W[2] - 6 * Pr * dW[3] * n[0] * W[0] * W[3] - 6 * Pr * dW[3] * n[2] * W[0] * W[1] + 4 * Pr * dW[2 * nEqs + 3] * n[0] * W[0] * W[1] + 9 * Pr * dW[nEqs] * n[1] * W[2] * W[3] - 6 * Pr * dW[nEqs] * n[2] * W[2] * W[3] + 9 * Pr * dW[2 * nEqs] * n[1] * W[2] * W[3] + 4 * Pr * dW[nEqs + 2] * n[2] * W[0] * W[3] - 6 * Pr * dW[2 * nEqs + 2] * n[1] * W[0] * W[3] - 6 * Pr * dW[2 * nEqs + 2] * n[2] * W[0] * W[2] - 6 * Pr * dW[nEqs + 3] * n[1] * W[0] * W[3] - 6 * Pr * dW[nEqs + 3] * n[2] * W[0] * W[2] + 4 * Pr * dW[2 * nEqs + 3] * n[1] * W[0] * W[2] + 12 * Pr * dW[2 * nEqs] * n[2] * W[2] * W[3] - 8 * Pr * dW[2 * nEqs + 3] * n[2] * W[0] * W[3] + 6 * dW[1] * kapa * n[0] * W[0] * W[1] + 6 * dW[0] * kapa * n[0] * W[0] * W[4] + 6 * dW[nEqs + 1] * kapa * n[1] * W[0] * W[1] + 6 * dW[2] * kapa * n[0] * W[0] * W[2] - 9 * dW[0] * kapa * n[0] * W[2] * W[3] + 6 * dW[nEqs] * kapa * n[1] * W[0] * W[4] + 6 * dW[2 * nEqs + 1] * kapa * n[2] * W[0] * W[1] + 6 * dW[nEqs + 2] * kapa * n[1] * W[0] * W[2] + 6 * dW[3] * kapa * n[0] * W[0] * W[3] - 9 * dW[nEqs] * kapa * n[1] * W[2] * W[3] + 6 * dW[2 * nEqs] * kapa * n[2] * W[0] * W[4] + 6 * dW[2 * nEqs + 2] * kapa * n[2] * W[0] * W[2] + 6 * dW[nEqs + 3] * kapa * n[1] * W[0] * W[3] - 9 * dW[2 * nEqs] * kapa * n[2] * W[2] * W[3] + 6 * dW[2 * nEqs + 3] * kapa * n[2] * W[0] * W[3]) / (3 * Pr * Re * (W[0] * W[0] * W[0] * W[0]));
+            a[21] = -(3 * dW[1] * kapa * n[0] * W[0] - 6 * dW[0] * kapa * n[0] * W[1] - 6 * dW[nEqs] * kapa * n[1] * W[1] + 3 * dW[nEqs + 1] * kapa * n[1] * W[0] - 6 * dW[2 * nEqs] * kapa * n[2] * W[1] + 3 * dW[2 * nEqs + 1] * kapa * n[2] * W[0] + 8 * Pr * dW[0] * n[0] * W[1] - 4 * Pr * dW[1] * n[0] * W[0] + Pr * dW[0] * n[1] * W[2] + Pr * dW[nEqs] * n[0] * W[2] + 6 * Pr * dW[nEqs] * n[1] * W[1] - 3 * Pr * dW[nEqs + 1] * n[1] * W[0] - 3 * Pr * dW[2] * n[1] * W[0] + 2 * Pr * dW[nEqs + 2] * n[0] * W[0] + 3 * Pr * dW[0] * n[2] * W[2] - 2 * Pr * dW[2 * nEqs] * n[0] * W[2] - 2 * Pr * dW[0] * n[2] * W[3] + 3 * Pr * dW[2 * nEqs] * n[0] * W[3] + 6 * Pr * dW[2 * nEqs] * n[2] * W[1] - 3 * Pr * dW[2 * nEqs + 1] * n[2] * W[0] - 3 * Pr * dW[3] * n[2] * W[0] + 2 * Pr * dW[2 * nEqs + 3] * n[0] * W[0]) / (3 * Pr * Re * (W[0] * W[0] * W[0]));
+            a[22] = -(3 * dW[2] * kapa * n[0] * W[0] - 6 * dW[0] * kapa * n[0] * W[2] - 3 * dW[0] * kapa * n[0] * W[3] - 6 * dW[nEqs] * kapa * n[1] * W[2] + 3 * dW[nEqs + 2] * kapa * n[1] * W[0] - 3 * dW[nEqs] * kapa * n[1] * W[3] - 6 * dW[2 * nEqs] * kapa * n[2] * W[2] + 3 * dW[2 * nEqs + 2] * kapa * n[2] * W[0] - 3 * dW[2 * nEqs] * kapa * n[2] * W[3] + 6 * Pr * dW[0] * n[0] * W[2] + Pr * dW[0] * n[1] * W[1] + Pr * dW[nEqs] * n[0] * W[1] + 2 * Pr * dW[1] * n[1] * W[0] - 3 * Pr * dW[nEqs + 1] * n[0] * W[0] - 3 * Pr * dW[2] * n[0] * W[0] + 3 * Pr * dW[0] * n[0] * W[3] + 3 * Pr * dW[0] * n[2] * W[1] - 2 * Pr * dW[2 * nEqs] * n[0] * W[1] + 8 * Pr * dW[nEqs] * n[1] * W[2] - 4 * Pr * dW[nEqs + 2] * n[1] * W[0] + 3 * Pr * dW[nEqs] * n[1] * W[3] + 6 * Pr * dW[nEqs] * n[2] * W[2] - 4 * Pr * dW[2 * nEqs] * n[1] * W[2] - 2 * Pr * dW[nEqs] * n[2] * W[3] + 3 * Pr * dW[2 * nEqs] * n[1] * W[3] + 6 * Pr * dW[2 * nEqs] * n[2] * W[2] - 3 * Pr * dW[2 * nEqs + 2] * n[2] * W[0] - 3 * Pr * dW[nEqs + 3] * n[2] * W[0] + 2 * Pr * dW[2 * nEqs + 3] * n[1] * W[0] + 4 * Pr * dW[2 * nEqs] * n[2] * W[3]) / (3 * Pr * Re * (W[0] * W[0] * W[0]));
+            a[23] = n[2] * (((2 * (dW[0] * W[1] - dW[1] * W[0])) / (3 * (W[0] * W[0])) + (2 * (dW[nEqs] * W[2] - dW[nEqs + 2] * W[0])) / (3 * (W[0] * W[0])) - (4 * (dW[2 * nEqs] * W[2] - dW[2 * nEqs + 3] * W[0])) / (3 * (W[0] * W[0]))) / (Re * W[0]) + (kapa * (W[0] * ((dW[2 * nEqs] * W[2] - dW[2 * nEqs + 3] * W[0]) / (W[0] * W[0]) - (dW[2 * nEqs] * W[3]) / (W[0] * W[0])) * (kapa - 1) + (dW[2 * nEqs] * W[3] * (kapa - 1)) / W[0])) / (Pr * Re * (W[0] * W[0]) * (kapa - 1))) - n[1] * (((dW[nEqs] * W[2] - dW[nEqs + 3] * W[0]) / (W[0] * W[0]) + (dW[2 * nEqs] * W[2] - dW[2 * nEqs + 2] * W[0]) / (W[0] * W[0])) / (Re * W[0]) - (kapa * (W[0] * ((dW[nEqs] * W[2] - dW[nEqs + 3] * W[0]) / (W[0] * W[0]) - (dW[nEqs] * W[3]) / (W[0] * W[0])) * (kapa - 1) + (dW[nEqs] * W[3] * (kapa - 1)) / W[0])) / (Pr * Re * (W[0] * W[0]) * (kapa - 1))) - n[0] * (((dW[0] * W[2] - dW[3] * W[0]) / (W[0] * W[0]) + (dW[2 * nEqs] * W[1] - dW[2 * nEqs + 1] * W[0]) / (W[0] * W[0])) / (Re * W[0]) - (kapa * (W[0] * ((dW[0] * W[2] - dW[3] * W[0]) / (W[0] * W[0]) - (dW[0] * W[3]) / (W[0] * W[0])) * (kapa - 1) + (dW[0] * W[3] * (kapa - 1)) / W[0])) / (Pr * Re * (W[0] * W[0]) * (kapa - 1)));
+            a[24] = -(kapa * (dW[0] * n[0] + dW[nEqs] * n[1] + dW[2 * nEqs] * n[2])) / (Pr * Re * (W[0] * W[0]));
+            a[25] = 0;
+            a[26] = 0;
+            a[27] = 0;
+            a[28] = 0;
+            a[29] = 0;
+            a[30] = -(4 * n[0] * W[1] + 3 * n[1] * W[2] + 3 * n[2] * W[2]) / (3 * Re * (W[0] * W[0]));
+            a[31] = (4 * n[0]) / (3 * Re * W[0]);
+            a[32] = n[1] / (Re * W[0]);
+            a[33] = n[2] / (Re * W[0]);
+            a[34] = 0;
+            a[35] = -(3 * n[0] * W[2] - 2 * n[1] * W[1]) / (3 * Re * (W[0] * W[0]));
+            a[36] = -(2 * n[1]) / (3 * Re * W[0]);
+            a[37] = n[0] / (Re * W[0]);
+            a[38] = 0;
+            a[39] = 0;
+            a[40] = -(3 * n[0] * W[2] - 2 * n[2] * W[1]) / (3 * Re * (W[0] * W[0]));
+            a[41] = -(2 * n[2]) / (3 * Re * W[0]);
+            a[42] = 0;
+            a[43] = n[0] / (Re * W[0]);
+            a[44] = 0;
+            a[45] = -(4 * Pr * n[0] * (W[1] * W[1]) - 3 * kapa * n[0] * (W[2] * W[2]) - 3 * kapa * n[0] * (W[1] * W[1]) + 3 * Pr * n[0] * (W[2] * W[2]) + Pr * n[1] * W[1] * W[2] + 3 * Pr * n[0] * W[2] * W[3] + 3 * Pr * n[2] * W[1] * W[2] - 2 * Pr * n[2] * W[1] * W[3] + 3 * kapa * n[0] * W[0] * W[4] - 3 * kapa * n[0] * W[2] * W[3]) / (3 * Pr * Re * (W[0] * W[0] * W[0]));
+            a[46] = -(2 * Pr * n[1] * W[2] - 4 * Pr * n[0] * W[1] + 2 * Pr * n[2] * W[3] + 3 * kapa * n[0] * W[1]) / (3 * Pr * Re * (W[0] * W[0]));
+            a[47] = (Pr * n[0] * W[2] + Pr * n[1] * W[1] - kapa * n[0] * W[2]) / (Pr * Re * (W[0] * W[0]));
+            a[48] = (Pr * n[0] * W[3] + Pr * n[2] * W[1] - kapa * n[0] * W[3]) / (Pr * Re * (W[0] * W[0]));
+            a[49] = (kapa * n[0]) / (Pr * Re * W[0]);
+            a[50] = 0;
+            a[51] = 0;
+            a[52] = 0;
+            a[53] = 0;
+            a[54] = 0;
+            a[55] = (2 * n[0] * W[2] - 3 * n[1] * W[1]) / (3 * Re * (W[0] * W[0]));
+            a[56] = n[1] / (Re * W[0]);
+            a[57] = -(2 * n[0]) / (3 * Re * W[0]);
+            a[58] = 0;
+            a[59] = 0;
+            a[60] = -(3 * n[0] * W[1] + 4 * n[1] * W[2] + 3 * n[2] * W[2]) / (3 * Re * (W[0] * W[0]));
+            a[61] = n[0] / (Re * W[0]);
+            a[62] = (4 * n[1]) / (3 * Re * W[0]);
+            a[63] = n[2] / (Re * W[0]);
+            a[64] = 0;
+            a[65] = -(W[2] * (3 * n[1] - 2 * n[2])) / (3 * Re * (W[0] * W[0]));
+            a[66] = 0;
+            a[67] = -(2 * n[2]) / (3 * Re * W[0]);
+            a[68] = n[1] / (Re * W[0]);
+            a[69] = 0;
+            a[70] = -(3 * Pr * n[1] * (W[1] * W[1]) - 3 * kapa * n[1] * (W[2] * W[2]) - 3 * kapa * n[1] * (W[1] * W[1]) + 4 * Pr * n[1] * (W[2] * W[2]) + 3 * Pr * n[2] * (W[2] * W[2]) + Pr * n[0] * W[1] * W[2] + 3 * Pr * n[1] * W[2] * W[3] - 2 * Pr * n[2] * W[2] * W[3] + 3 * kapa * n[1] * W[0] * W[4] - 3 * kapa * n[1] * W[2] * W[3]) / (3 * Pr * Re * (W[0] * W[0] * W[0]));
+            a[71] = (Pr * n[0] * W[2] + Pr * n[1] * W[1] - kapa * n[1] * W[1]) / (Pr * Re * (W[0] * W[0]));
+            a[72] = -(2 * Pr * n[0] * W[1] - 4 * Pr * n[1] * W[2] + 2 * Pr * n[2] * W[3] + 3 * kapa * n[1] * W[2]) / (3 * Pr * Re * (W[0] * W[0]));
+            a[73] = (Pr * n[1] * W[3] + Pr * n[2] * W[2] - kapa * n[1] * W[3]) / (Pr * Re * (W[0] * W[0]));
+            a[74] = (kapa * n[1]) / (Pr * Re * W[0]);
+            a[75] = 0;
+            a[76] = 0;
+            a[77] = 0;
+            a[78] = 0;
+            a[79] = 0;
+            a[80] = (2 * n[0] * W[2] - 3 * n[2] * W[1]) / (3 * Re * (W[0] * W[0]));
+            a[81] = n[2] / (Re * W[0]);
+            a[82] = 0;
+            a[83] = -(2 * n[0]) / (3 * Re * W[0]);
+            a[84] = 0;
+            a[85] = (W[2] * (2 * n[1] - 3 * n[2])) / (3 * Re * (W[0] * W[0]));
+            a[86] = 0;
+            a[87] = n[2] / (Re * W[0]);
+            a[88] = -(2 * n[1]) / (3 * Re * W[0]);
+            a[89] = 0;
+            a[90] = -(3 * n[0] * W[1] + 3 * n[1] * W[2] + 4 * n[2] * W[2]) / (3 * Re * (W[0] * W[0]));
+            a[91] = n[0] / (Re * W[0]);
+            a[92] = n[1] / (Re * W[0]);
+            a[93] = (4 * n[2]) / (3 * Re * W[0]);
+            a[94] = 0;
+            a[95] = -(3 * Pr * n[2] * (W[1] * W[1]) - 3 * kapa * n[2] * (W[2] * W[2]) - 2 * Pr * n[1] * (W[2] * W[2]) - 3 * kapa * n[2] * (W[1] * W[1]) + 3 * Pr * n[2] * (W[2] * W[2]) - 2 * Pr * n[0] * W[1] * W[2] + 3 * Pr * n[0] * W[1] * W[3] + 3 * Pr * n[1] * W[2] * W[3] + 4 * Pr * n[2] * W[2] * W[3] + 3 * kapa * n[2] * W[0] * W[4] - 3 * kapa * n[2] * W[2] * W[3]) / (3 * Pr * Re * (W[0] * W[0] * W[0]));
+            a[96] = (Pr * n[0] * W[3] + Pr * n[2] * W[1] - kapa * n[2] * W[1]) / (Pr * Re * (W[0] * W[0]));
+            a[97] = (Pr * n[1] * W[3] + Pr * n[2] * W[2] - kapa * n[2] * W[2]) / (Pr * Re * (W[0] * W[0]));
+            a[98] = -(2 * Pr * n[0] * W[1] + 2 * Pr * n[1] * W[2] - 4 * Pr * n[2] * W[3] + 3 * kapa * n[2] * W[3]) / (3 * Pr * Re * (W[0] * W[0]));
+            a[99] = (kapa * n[2]) / (Pr * Re * W[0]);
+        }
+
         return a;
     }
 
     @Override
-    public double[] diffusiveFluxJacobian(double[] W, double[] dW, double n[], ElementData elemData) {
-        double[] a = new double[nEqs * nEqs * 3];
-        a[0] = 0;
-        a[1] = 0;
-        a[2] = 0;
-        a[3] = 0;
-        a[4] = (8 * dW[0] * n[0] * W[1] - 4 * dW[1] * n[0] * W[0] + 6 * dW[0] * n[1] * W[2] - 4 * dW[nEqs] * n[0] * W[2] + 6 * dW[nEqs] * n[1] * W[1] - 3 * dW[nEqs + 1] * n[1] * W[0] - 3 * dW[2] * n[1] * W[0] + 2 * dW[nEqs + 2] * n[0] * W[0]) / (3 * Re * (W[0] * W[0] * W[0]));
-        a[5] = -(4 * dW[0] * n[0] + 3 * dW[nEqs] * n[1]) / (3 * Re * (W[0] * W[0]));
-        a[6] = -(3 * dW[0] * n[1] - 2 * dW[nEqs] * n[0]) / (3 * Re * (W[0] * W[0]));
-        a[7] = 0;
-        a[8] = (6 * dW[0] * n[0] * W[2] - 4 * dW[0] * n[1] * W[1] + 6 * dW[nEqs] * n[0] * W[1] + 2 * dW[1] * n[1] * W[0] - 3 * dW[nEqs + 1] * n[0] * W[0] - 3 * dW[2] * n[0] * W[0] + 8 * dW[nEqs] * n[1] * W[2] - 4 * dW[nEqs + 2] * n[1] * W[0]) / (3 * Re * (W[0] * W[0] * W[0]));
-        a[9] = (2 * dW[0] * n[1] - 3 * dW[nEqs] * n[0]) / (3 * Re * (W[0] * W[0]));
-        a[10] = -(3 * dW[0] * n[0] + 4 * dW[nEqs] * n[1]) / (3 * Re * (W[0] * W[0]));
-        a[11] = 0;
-        a[12] = (12 * Pr * dW[0] * n[0] * (W[1] * W[1]) + 9 * Pr * dW[0] * n[0] * (W[2] * W[2]) + 9 * Pr * dW[nEqs] * n[1] * (W[1] * W[1]) + 12 * Pr * dW[nEqs] * n[1] * (W[2] * W[2]) - 9 * dW[0] * kapa * n[0] * (W[1] * W[1]) - 9 * dW[0] * kapa * n[0] * (W[2] * W[2]) - 9 * dW[nEqs] * kapa * n[1] * (W[1] * W[1]) - 3 * dW[3] * kapa * n[0] * (W[0] * W[0]) - 9 * dW[nEqs] * kapa * n[1] * (W[2] * W[2]) - 3 * dW[nEqs + 3] * kapa * n[1] * (W[0] * W[0]) - 8 * Pr * dW[1] * n[0] * W[0] * W[1] + 3 * Pr * dW[0] * n[1] * W[1] * W[2] + 3 * Pr * dW[nEqs] * n[0] * W[1] * W[2] + 4 * Pr * dW[1] * n[1] * W[0] * W[2] - 6 * Pr * dW[nEqs + 1] * n[0] * W[0] * W[2] - 6 * Pr * dW[nEqs + 1] * n[1] * W[0] * W[1] - 6 * Pr * dW[2] * n[0] * W[0] * W[2] - 6 * Pr * dW[2] * n[1] * W[0] * W[1] + 4 * Pr * dW[nEqs + 2] * n[0] * W[0] * W[1] - 8 * Pr * dW[nEqs + 2] * n[1] * W[0] * W[2] + 6 * dW[1] * kapa * n[0] * W[0] * W[1] + 6 * dW[0] * kapa * n[0] * W[0] * W[3] + 6 * dW[nEqs + 1] * kapa * n[1] * W[0] * W[1] + 6 * dW[2] * kapa * n[0] * W[0] * W[2] + 6 * dW[nEqs] * kapa * n[1] * W[0] * W[3] + 6 * dW[nEqs + 2] * kapa * n[1] * W[0] * W[2]) / (3 * Pr * Re * (W[0] * W[0] * W[0] * W[0]));
-        a[13] = -(3 * dW[1] * kapa * n[0] * W[0] - 6 * dW[0] * kapa * n[0] * W[1] - 6 * dW[nEqs] * kapa * n[1] * W[1] + 3 * dW[nEqs + 1] * kapa * n[1] * W[0] + 8 * Pr * dW[0] * n[0] * W[1] - 4 * Pr * dW[1] * n[0] * W[0] + Pr * dW[0] * n[1] * W[2] + Pr * dW[nEqs] * n[0] * W[2] + 6 * Pr * dW[nEqs] * n[1] * W[1] - 3 * Pr * dW[nEqs + 1] * n[1] * W[0] - 3 * Pr * dW[2] * n[1] * W[0] + 2 * Pr * dW[nEqs + 2] * n[0] * W[0]) / (3 * Pr * Re * (W[0] * W[0] * W[0]));
-        a[14] = -(3 * dW[2] * kapa * n[0] * W[0] - 6 * dW[0] * kapa * n[0] * W[2] - 6 * dW[nEqs] * kapa * n[1] * W[2] + 3 * dW[nEqs + 2] * kapa * n[1] * W[0] + 6 * Pr * dW[0] * n[0] * W[2] + Pr * dW[0] * n[1] * W[1] + Pr * dW[nEqs] * n[0] * W[1] + 2 * Pr * dW[1] * n[1] * W[0] - 3 * Pr * dW[nEqs + 1] * n[0] * W[0] - 3 * Pr * dW[2] * n[0] * W[0] + 8 * Pr * dW[nEqs] * n[1] * W[2] - 4 * Pr * dW[nEqs + 2] * n[1] * W[0]) / (3 * Pr * Re * (W[0] * W[0] * W[0]));
-        a[15] = -(kapa * (dW[0] * n[0] + dW[nEqs] * n[1])) / (Pr * Re * (W[0] * W[0]));
-        a[16] = 0;
-        a[17] = 0;
-        a[18] = 0;
-        a[19] = 0;
-        a[20] = -(4 * n[0] * W[1] + 3 * n[1] * W[2]) / (3 * Re * (W[0] * W[0]));
-        a[21] = (4 * n[0]) / (3 * Re * W[0]);
-        a[22] = n[1] / (Re * W[0]);
-        a[23] = 0;
-        a[24] = -(3 * n[0] * W[2] - 2 * n[1] * W[1]) / (3 * Re * (W[0] * W[0]));
-        a[25] = -(2 * n[1]) / (3 * Re * W[0]);
-        a[26] = n[0] / (Re * W[0]);
-        a[27] = 0;
-        a[28] = -(4 * Pr * n[0] * (W[1] * W[1]) - 3 * kapa * n[0] * (W[2] * W[2]) - 3 * kapa * n[0] * (W[1] * W[1]) + 3 * Pr * n[0] * (W[2] * W[2]) + Pr * n[1] * W[1] * W[2] + 3 * kapa * n[0] * W[0] * W[3]) / (3 * Pr * Re * (W[0] * W[0] * W[0]));
-        a[29] = -(2 * Pr * n[1] * W[2] - 4 * Pr * n[0] * W[1] + 3 * kapa * n[0] * W[1]) / (3 * Pr * Re * (W[0] * W[0]));
-        a[30] = (Pr * n[0] * W[2] + Pr * n[1] * W[1] - kapa * n[0] * W[2]) / (Pr * Re * (W[0] * W[0]));
-        a[31] = (kapa * n[0]) / (Pr * Re * W[0]);
-        a[32] = 0;
-        a[33] = 0;
-        a[34] = 0;
-        a[35] = 0;
-        a[36] = (2 * n[0] * W[2] - 3 * n[1] * W[1]) / (3 * Re * (W[0] * W[0]));
-        a[37] = n[1] / (Re * W[0]);
-        a[38] = -(2 * n[0]) / (3 * Re * W[0]);
-        a[39] = 0;
-        a[40] = -(3 * n[0] * W[1] + 4 * n[1] * W[2]) / (3 * Re * (W[0] * W[0]));
-        a[41] = n[0] / (Re * W[0]);
-        a[42] = (4 * n[1]) / (3 * Re * W[0]);
-        a[43] = 0;
-        a[44] = -(3 * Pr * n[1] * (W[1] * W[1]) - 3 * kapa * n[1] * (W[2] * W[2]) - 3 * kapa * n[1] * (W[1] * W[1]) + 4 * Pr * n[1] * (W[2] * W[2]) + Pr * n[0] * W[1] * W[2] + 3 * kapa * n[1] * W[0] * W[3]) / (3 * Pr * Re * (W[0] * W[0] * W[0]));
-        a[45] = (Pr * n[0] * W[2] + Pr * n[1] * W[1] - kapa * n[1] * W[1]) / (Pr * Re * (W[0] * W[0]));
-        a[46] = -(2 * Pr * n[0] * W[1] - 4 * Pr * n[1] * W[2] + 3 * kapa * n[1] * W[2]) / (3 * Pr * Re * (W[0] * W[0]));
-        a[47] = (kapa * n[1]) / (Pr * Re * W[0]);
-
-        return a;
-    }
-
-    @Override
-    public double[] getResults(double[] W, double[] dW, double[] X, String name) {
+    public double[] getResults(double[] W, double[] dW, double[] X, String name
+    ) {
         switch (name.toLowerCase()) {
             case "temperature":
                 double velocity2 = 0;
