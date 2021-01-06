@@ -35,52 +35,52 @@ public class NavierStokes extends Aerodynamics {
         }
         return p;
     }
+	
+	@Override
+	public double[] stressVector(double[] W, double[] dW, double[] normal) {
+		if (isDiffusive) {		
+			double rho = W[0];
 
-    @Override
-    public double[] stressVector(double[] W, double[] dW, double[] normal) {
-        if (isDiffusive) {
-            double rho = W[0];
+			double[] velocity = new double[dim];
+			for (int d = 0; d < dim; ++d) {
+				velocity[d] = W[d + 1] / rho;
+			}
 
-            double[] velocity = new double[dim];
-            for (int d = 0; d < dim; ++d) {
-                velocity[d] = W[d + 1] / rho;
-            }
+			double[] velocityJac = new double[dim * dim];
+			for (int d = 0; d < dim; ++d) {
+				for (int f = 0; f < dim; ++f) {
+					velocityJac[dim * d + f] = (dW[f * nEqs + d + 1] - dW[f * nEqs] * velocity[d]) / rho;
+				}
+			}
 
-            double[] velocityJac = new double[dim * dim];
-            for (int d = 0; d < dim; ++d) {
-                for (int f = 0; f < dim; ++f) {
-                    velocityJac[dim * d + f] = (dW[f * nEqs + d + 1] - dW[f * nEqs] * velocity[d]) / rho;
-                }
-            }
+			double[] stress = new double[dim * dim];
+			double trace = .0;
+			for (int d = 0; d < dim; ++d) {
+				trace += velocityJac[dim * d + d];
+				for (int f = 0; f < dim; ++f) {
+					stress[dim * d + f] = velocityJac[dim * d + f] + velocityJac[dim * f + d];
+				}
+			}
+			double lam = -2. / 3; // Stokesuv vztah
+			for (int d = 0; d < dim; ++d) {
+				stress[dim * d + d] += lam * trace;
+			}
 
-            double[] stress = new double[dim * dim];
-            double trace = .0;
-            for (int d = 0; d < dim; ++d) {
-                trace += velocityJac[dim * d + d];
-                for (int f = 0; f < dim; ++f) {
-                    stress[dim * d + f] = velocityJac[dim * d + f] + velocityJac[dim * f + d];
-                }
-            }
-            double lam = -2. / 3; // Stokesuv vztah
-            for (int d = 0; d < dim; ++d) {
-                stress[dim * d + d] += lam * trace;
-            }
+			double p = pressure(W);
 
-            double p = pressure(W);
+			double[] stressVector = new double[dim];
+			for (int d = 0; d < dim; ++d) {
+				stressVector[d] -= p * normal[d];
+				for (int f = 0; f < dim; ++f) {
+					stressVector[d] += 1 / Re * stress[dim * d + f] * normal[f];
+				}
+			}
 
-            double[] normalStress = new double[dim];
-            for (int d = 0; d < dim; ++d) {
-                normalStress[d] -= p * normal[d];
-                for (int f = 0; f < dim; ++f) {
-                    normalStress[d] += 1 / Re * stress[dim * d + f] * normal[f];
-                }
-            }
-
-            return normalStress;
-        } else {
-            return super.stressVector(W, dW, normal);
-        }
-    }
+			return stressVector;
+		} else {
+			return super.stressVector(W, dW, normal);
+		}
+	}
 
     @Override
     public void saveReferenceValues(String filePath) throws IOException {
@@ -93,11 +93,6 @@ public class NavierStokes extends Aerodynamics {
         output.setProperty("t", Double.toString(tRef));
 
         output.store(new FileOutputStream(filePath), null);
-    }
-
-    @Override
-    public double[] getReferenceValues() {
-        return new double[]{lRef, pRef, rhoRef, velocityRef, tRef};
     }
 
     @Override
