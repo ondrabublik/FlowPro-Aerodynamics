@@ -7,8 +7,13 @@ import java.util.Arrays;
 
 public class NavierStokesVelocityInlet extends NavierStokes {
 	
-	double height = 0.41;
+	protected double height = 0.41;
 	
+	protected enum InletType {
+		VELOCITY, PARABOLA, PARABOLA2
+	}
+	
+	protected InletType inletType;
 	
 	@Override
 	public void init(FlowProProperties props) throws IOException {
@@ -88,7 +93,22 @@ public class NavierStokesVelocityInlet extends NavierStokes {
                 }
                 
                 pOut = props.getDouble("pOut") / pRef;
-            } else if (velocityInletBC) {				
+            } else if (velocityInletBC) {
+				if (props.containsKey("inletType")) {
+					String type = props.getString("inletType");
+					if (InletType.VELOCITY.name().toLowerCase().equals(type)) {
+						inletType = InletType.VELOCITY;
+					} else if (InletType.PARABOLA.name().toLowerCase().equals(type)) {
+						inletType = InletType.PARABOLA;
+					} else if (InletType.PARABOLA2.name().toLowerCase().equals(type)) {
+						inletType = InletType.PARABOLA2;
+					} else {
+						throw new IOException("unknown inlet type \'" + type + "\'");
+					}
+				} else {
+					inletType = InletType.VELOCITY;
+				}
+				
 				if (props.containsKey("rhoIn")) {
 					rhoRef = props.getDouble("rhoIn");
 				} else if (props.containsKey("TIn")) {
@@ -246,9 +266,19 @@ public class NavierStokesVelocityInlet extends NavierStokes {
 				
 				if (!isInletSupersonic) { // subsonic inlet
 					double p = pressure(WL);
-					double y = elem.currentX[1];					
-					double inletVelocity = 1.5 * y * (height-y) / (height*height/4); 
-					double rhoIn = 1;				               
+					double y = elem.currentX[1];
+					
+					double inletVelocity = 1;
+					if (inletType == InletType.PARABOLA || inletType == InletType.PARABOLA2) {
+						inletVelocity = 1.5 * y * (height-y) / (height*height/4);
+					}
+					
+					double t = elem.currentT * tRef;
+					if (inletType == InletType.PARABOLA2 && t < 2.0) {
+						inletVelocity *= (1 - Math.cos(Math.PI / 2 * t)) / 2;
+					}
+					double rhoIn = 1;
+					
                     double E = p / (kapa - 1) + 0.5 * rhoIn * inletVelocity * inletVelocity;
 
                     WR[0] = rhoIn;
@@ -326,9 +356,14 @@ public class NavierStokesVelocityInlet extends NavierStokes {
         if (isInletSupersonic) {
             return WIn;
         } else {
-			double p = pOut;
+			double p = pOut;			
 			double inletVelocity = 1;
-			double rhoIn = 1;				               
+			double rhoIn = 1;
+			
+			if (inletType == InletType.PARABOLA2) {
+				inletVelocity = 0;
+			}
+			
 			double E = p / (kapa - 1) + 0.5 * rhoIn * inletVelocity * inletVelocity;
 			
             double[] vIn = new double[dim];
