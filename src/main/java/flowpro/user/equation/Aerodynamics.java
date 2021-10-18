@@ -34,6 +34,7 @@ public abstract class Aerodynamics implements Equation {
     protected double rhoRef;
     protected double velocityRef;
     protected double tRef;  // nepouziva se !!!???
+    protected double etaRef;
     double cp, cv;
 
     // inlet boundary condition
@@ -280,6 +281,7 @@ public abstract class Aerodynamics implements Equation {
                 Pr = props.getDouble("prandtl");
             } else if (props.containsKey("viscosity") && props.containsKey("conductivity")) {
                 double viscosity = props.getDouble("viscosity");
+                etaRef = viscosity;
                 double conductivity = props.getDouble("conductivity");
 
                 Pr = cp * viscosity / conductivity;

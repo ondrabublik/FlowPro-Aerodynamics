@@ -22,8 +22,8 @@ public class SpalartAllmarasVelocityInlet extends SpalartAllmaras{
         super.init(props);
         
         // acceleration
-        if(props.containsKey("vInlet")){
-            vInlet = props.getDouble("vInlet");
+        if(props.containsKey("vIn")){
+            vInlet = props.getDouble("vIn");
         } else {
             throw new IOException("Velocity in inlet must be defined!");
         }
