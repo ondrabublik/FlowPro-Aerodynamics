@@ -240,12 +240,24 @@ public class SpalartAllmaras extends Aerodynamics {
                         mach = Math.sqrt((2 / (kapa - 1)) * (-1 + Math.pow(pIn0 / p, (kapa - 1) / kapa)));
                     }
                     double rhoIn = rhoIn0 * Math.pow((1 + ((kapa - 1) / 2) * mach * mach), 1 / (1 - kapa));
-                    double normalVelocity = mach * Math.sqrt((kapa * p) / rhoIn);
-                    double E = p / (kapa - 1) + 0.5 * rhoIn * normalVelocity * normalVelocity;
+                    double inletVelocity = mach * Math.sqrt((kapa * p) / rhoIn);
+                    double E = p / (kapa - 1) + 0.5 * rhoIn * inletVelocity * inletVelocity;
 
                     WR[0] = rhoIn;
-                    for (int d = 0; d < dim; ++d) {
-                        WR[d + 1] = -rhoIn * normalVelocity * n[d];
+                    if (attackAngle == null) {
+                        for (int d = 0; d < dim; ++d) {
+                            WR[d + 1] = -rhoIn * inletVelocity * n[d];
+                        }
+                    } else {
+                        double[] dir;
+                        if (dim == 2) {
+                            dir = new double[]{Math.cos(attackAngle[0]), Math.sin(attackAngle[0])};
+                        } else {
+                            dir = new double[]{Math.cos(attackAngle[0]) * Math.cos(attackAngle[1]), Math.sin(attackAngle[0]) * Math.cos(attackAngle[1]), Math.sin(attackAngle[1])};
+                        }
+                        for (int d = 0; d < dim; ++d) {
+                            WR[d + 1] = rhoIn * inletVelocity * dir[d];
+                        }
                     }
                     WR[dim + 1] = E;
                     WR[dim + 2] = rhoIn * vtIn;
@@ -422,7 +434,7 @@ public class SpalartAllmaras extends Aerodynamics {
         double fv1 = xi * xi * xi / (xi * xi * xi + cv1 * cv1 * cv1);
         double fv2 = 1 - xi / (1 + xi * fv1);
         double Om = rotationMagnitude(velocityJac);
-        //double S = Om + C_prod * min(0, Smag - Om) + 1 / Re * vt / (ka * ka * D * D) * fv2;
+        //double S = Om + C_prod * Math.min(0, Smag - Om) + 1 / Re * vt / (ka * ka * D * D) * fv2;
         double S = Om + 1 / Re * vt / (ka * ka * D * D) * fv2;
         double rt = vt / (Re * S * ka * ka * D * D);
         if (rt > 10) {
