@@ -31,7 +31,7 @@ public class SpalartAllmaras extends Aerodynamics {
     double ct4;
     double Prt;
     double C_prod;
-
+    
     @Override
     public void init(FlowProProperties props) throws IOException {
         int dimension = props.getInt("dimension");
@@ -240,12 +240,24 @@ public class SpalartAllmaras extends Aerodynamics {
                         mach = Math.sqrt((2 / (kapa - 1)) * (-1 + Math.pow(pIn0 / p, (kapa - 1) / kapa)));
                     }
                     double rhoIn = rhoIn0 * Math.pow((1 + ((kapa - 1) / 2) * mach * mach), 1 / (1 - kapa));
-                    double normalVelocity = mach * Math.sqrt((kapa * p) / rhoIn);
-                    double E = p / (kapa - 1) + 0.5 * rhoIn * normalVelocity * normalVelocity;
+                    double inletVelocity = mach * Math.sqrt((kapa * p) / rhoIn);
+                    double E = p / (kapa - 1) + 0.5 * rhoIn * inletVelocity * inletVelocity;
 
                     WR[0] = rhoIn;
-                    for (int d = 0; d < dim; ++d) {
-                        WR[d + 1] = -rhoIn * normalVelocity * n[d];
+                    if (attackAngle == null) {
+                        for (int d = 0; d < dim; ++d) {
+                            WR[d + 1] = -rhoIn * inletVelocity * n[d];
+                        }
+                    } else {
+                        double[] dir;
+                        if (dim == 2) {
+                            dir = new double[]{Math.cos(attackAngle[0]), Math.sin(attackAngle[0])};
+                        } else {
+                            dir = new double[]{Math.cos(attackAngle[0]) * Math.cos(attackAngle[1]), Math.sin(attackAngle[0]) * Math.cos(attackAngle[1]), Math.sin(attackAngle[1])};
+                        }
+                        for (int d = 0; d < dim; ++d) {
+                            WR[d + 1] = rhoIn * inletVelocity * dir[d];
+                        }
                     }
                     WR[dim + 1] = E;
                     WR[dim + 2] = rhoIn * vtIn;
@@ -415,24 +427,20 @@ public class SpalartAllmaras extends Aerodynamics {
         }
 
         double D = elem.currentWallDistance;
-
         double xi = rho*vt; // vt/v 
-        double ft2 = 0; //ct3*Math.exp(-ct4*xi*xi);
-        double ft1 = 0;
+        double ft2 = 0;//ct3*Math.exp(-ct4*xi*xi);
         double fv1 = xi * xi * xi / (xi * xi * xi + cv1 * cv1 * cv1);
         double fv2 = 1 - xi / (1 + xi * fv1);
         double Om = rotationMagnitude(velocityJac);
-        //double S = Om + C_prod * min(0, Smag - Om) + 1 / Re * vt / (ka * ka * D * D) * fv2;
+        //double S = Om + C_prod * Math.min(0, Smag - Om) + 1 / Re * vt / (ka * ka * D * D) * fv2;
         double S = Om + 1 / Re * vt / (ka * ka * D * D) * fv2;
-        double rt = vt / (Re * S * ka * ka * D * D);
-        if (rt > 10) {
-            rt = 10;
-        }
+        double rt = Math.min(vt / (Re * S * ka * ka * D * D), 10);
+
         double g = rt + cw2 * (Math.pow(rt, 6.0) - rt);
         double fw = g * Math.pow((1 + Math.pow(cw3, 6.0)) / (Math.pow(g, 6.0) + Math.pow(cw3, 6.0)), 1.0 / 6);
 
         double[] source = new double[nEqs];
-        source[dim + 2] = limitDestruction(1 / Re * rho * cb2 * vtDerMag + cb1 * (1 - ft2) * rho * S * vt - 1 / Re * (cw1 * fw - cb1 / (ka * ka) * ft2) / rho * (rho * vt / D) * (rho * vt / D)); // + r*Re*ft1*dU*dU
+        source[dim + 2] = limitDestruction(1 / Re * rho * cb2 * vtDerMag + cb1 * (1 - ft2) * rho * S * vt - 1 / Re * (cw1 * fw - cb1 / (ka * ka) * ft2) / rho * (rho * vt / D) * (rho * vt / D));
         return source;
     }
 
@@ -450,10 +458,10 @@ public class SpalartAllmaras extends Aerodynamics {
                 return new double[]{pRef * W[dim + 1]};
                         
             case "mut":
-                double xi = max(W[dim+2],0); // vt/v
+                double xi = max(W[dim + 2],0); // vt/v
                 double fv1 = xi * xi * xi / (xi * xi * xi + cv1 * cv1 * cv1);
                 return new double[]{W[dim + 2]*fv1};
-
+                
             default:
                 return super.getResults(W, dW, X, name);
         }
@@ -491,4 +499,50 @@ public class SpalartAllmaras extends Aerodynamics {
         }
         return d;
     }
+    
+    @Override
+	public double[] stressVector(double[] W, double[] dW, double[] normal) {
+		if (isDiffusive) {		
+			double rho = W[0];
+
+			double[] velocity = new double[dim];
+			for (int d = 0; d < dim; ++d) {
+				velocity[d] = W[d + 1] / rho;
+			}
+
+			double[] velocityJac = new double[dim * dim];
+			for (int d = 0; d < dim; ++d) {
+				for (int f = 0; f < dim; ++f) {
+					velocityJac[dim * d + f] = (dW[f * nEqs + d + 1] - dW[f * nEqs] * velocity[d]) / rho;
+				}
+			}
+
+			double[] stress = new double[dim * dim];
+			double trace = .0;
+			for (int d = 0; d < dim; ++d) {
+				trace += velocityJac[dim * d + d];
+				for (int f = 0; f < dim; ++f) {
+					stress[dim * d + f] = velocityJac[dim * d + f] + velocityJac[dim * f + d];
+				}
+			}
+			double lam = -2. / 3; // Stokesuv vztah
+			for (int d = 0; d < dim; ++d) {
+				stress[dim * d + d] += lam * trace;
+			}
+
+			double p = pressure(W);
+
+			double[] normalStress = new double[dim];
+			for (int d = 0; d < dim; ++d) {
+				normalStress[d] -= p * normal[d];
+				for (int f = 0; f < dim; ++f) {
+					normalStress[d] += 1 / Re * stress[dim * d + f] * normal[f];
+				}
+			}
+
+			return normalStress;
+		} else {
+			return super.stressVector(W, dW, normal);
+		}
+	}
 }

@@ -10,65 +10,55 @@ import java.util.Arrays;
  *
  * @author ales
  */
-public class KOmegaSST extends Aerodynamics {
+public class SpalartAllmaras4 extends Aerodynamics {
 
     protected static final double P_TOL = 1e-1;
 
-    double kIn;
-    double omIn;
-    double omWall;
-    
-    double kref;
-    double omref;
-    double muref;
+    double vtIn; // turbulence intensity at the inlet
 
-    double LIM_TOL;
-
-    // Sutherland constant
-    double Suth;
-    
     // parameters of turbulence model
-    double a1;
-    double sk1;
-    double som1;
-    double alpha1;
-    double beta1;
-    double betast;   // beta star 
-    double sk2;
-    double som2;
-    double alpha2;
-    double beta2;
+    double sigma;
+    double cb1;
+    double cb2;
+    double ka;
+    double cw1;
+    double cw2;
+    double cw3;
+    double cv1;
+    double ct1;
+    double ct2;
+    double ct3;
+    double ct4;
     double Prt;
- 
+    double C_prod;
+    
 
     @Override
     public void init(FlowProProperties props) throws IOException {
         int dimension = props.getInt("dimension");
-        super.init(props, dimension, dimension + 4, true);
+        super.init(props, dimension, dimension + 3, true);
 
         // inlet
-        kIn = props.getDouble("kIn");
-        omIn = props.getDouble("omIn");
+        vtIn = props.getDouble("vtIn");
         if (isInletSupersonic) {
-            WIn[dimension + 2] = kIn;
-            WIn[dimension + 3] = omIn;
+            WIn[dimension + 2] = WIn[0]*vtIn;
         }
-        
-        // Sutherland
-        Suth = props.getDouble("SuthConst");
-        
+
         // parameters of turbulence model
-        a1 = props.getDouble("a1");
-        sk1 = props.getDouble("sk1");
-        som1 = props.getDouble("som1");
-        alpha1 = props.getDouble("alpha1");
-        beta1 = props.getDouble("beta1");
-        betast = props.getDouble("betast");
-        sk2 = props.getDouble("sk2");
-        som2 = props.getDouble("som2");
-        alpha2 = props.getDouble("alpha2");
-        beta2 = props.getDouble("beta2");
+        sigma = props.getDouble("sigma");
+        cb1 = props.getDouble("cb1");
+        cb2 = props.getDouble("cb2");
+        ka = props.getDouble("ka");
+        cw1 = cb1 / (ka * ka) + (1 + cb2) / sigma;
+        cw2 = props.getDouble("cw2");
+        cw3 = props.getDouble("cw3");
+        cv1 = props.getDouble("cv1");
+        ct1 = props.getDouble("ct1");
+        ct2 = props.getDouble("ct2");
+        ct3 = props.getDouble("ct3");
+        ct4 = props.getDouble("ct4");
         Prt = props.getDouble("Prt");
+        C_prod = props.getDouble("C_prod");
     }
 
     @Override
@@ -98,11 +88,6 @@ public class KOmegaSST extends Aerodynamics {
         output.setProperty("t", Double.toString(tRef));
 
         output.store(new FileOutputStream(filePath), null);
-    }
-
-    @Override
-    public double[] getReferenceValues() {
-        return new double[]{lRef, pRef, rhoRef, velocityRef, tRef};
     }
 
     @Override
@@ -143,9 +128,8 @@ public class KOmegaSST extends Aerodynamics {
                 W[d + 1] = rhoIn * vIn[d];
             }
             W[dim + 1] = pOut / (kapa - 1) + 0.5 * rhoIn * VIn * VIn;
-            W[dim + 2] = rhoIn * kIn;
-            W[dim + 3] = rhoIn * omIn;
-
+            W[dim + 2] = rhoIn * vtIn;
+            
             return W;
         }
     }
@@ -168,9 +152,10 @@ public class KOmegaSST extends Aerodynamics {
                     V += elem.meshVelocity[d] * n[d];
                 }
                 f[dim + 1] = p * V;
-
+                
+                // for ALE
                 for (int j = 0; j < nEqs; j++) {
-                    f[j] += V * WR[j];
+                    f[j] += V*WR[j];
                 }
                 break;
 
@@ -210,7 +195,6 @@ public class KOmegaSST extends Aerodynamics {
         }
         f[dim + 1] = (W[dim + 1] + p) * V;
         f[dim + 2] = W[dim + 2] * V;
-        f[dim + 3] = W[dim + 3] * V;
         return f;
     }
 
@@ -235,12 +219,17 @@ public class KOmegaSST extends Aerodynamics {
                     }
                     WR[dim + 1] = p / (kapa - 1) + WR[0] * absVelocity2 / 2;
                     WR[dim + 2] = 0;
-                    WR[dim + 3] = WL[dim + 3];
-                    //WR[dim + 3] = omWall;
                     break;
                 }
             case (Aerodynamics.BoundaryType.INVISCID_WALL):
                 WR = Arrays.copyOf(WL, nEqs);
+                double nu = 0;
+                for (int d = 0; d < dim; ++d) {
+                    nu += WL[d + 1] * n[d];
+                }
+                for (int d = 0; d < dim; ++d) { //tangent to wall
+                    WR[d + 1] = WL[d + 1] + n[d] * nu;
+                }
                 break;
 
             case (Aerodynamics.BoundaryType.INLET):
@@ -252,13 +241,13 @@ public class KOmegaSST extends Aerodynamics {
                         mach = Math.sqrt((2 / (kapa - 1)) * (-1 + Math.pow(pIn0 / p, (kapa - 1) / kapa)));
                     }
                     double rhoIn = rhoIn0 * Math.pow((1 + ((kapa - 1) / 2) * mach * mach), 1 / (1 - kapa));
-                    double inletVelocity = mach * Math.sqrt((kapa * p) / rhoIn);
-                    double E = p / (kapa - 1) + 0.5 * rhoIn * inletVelocity * inletVelocity;
+                    double normalVelocity = mach * Math.sqrt((kapa * p) / rhoIn);
+                    double E = p / (kapa - 1) + 0.5 * rhoIn * normalVelocity * normalVelocity;
 
                     WR[0] = rhoIn;
                     if (attackAngle == null) {
                         for (int d = 0; d < dim; ++d) {
-                            WR[d + 1] = -rhoIn * inletVelocity * n[d];
+                            WR[d + 1] = -rhoIn * normalVelocity * n[d];
                         }
                     } else {
                         double[] dir;
@@ -268,12 +257,11 @@ public class KOmegaSST extends Aerodynamics {
                             dir = new double[]{Math.cos(attackAngle[0]) * Math.cos(attackAngle[1]), Math.sin(attackAngle[0]) * Math.cos(attackAngle[1]), Math.sin(attackAngle[1])};
                         }
                         for (int d = 0; d < dim; ++d) {
-                            WR[d + 1] = rhoIn * inletVelocity * dir[d];
+                            WR[d + 1] = rhoIn * normalVelocity * dir[d];
                         }
                     }
                     WR[dim + 1] = E;
-                    WR[dim + 2] = rhoIn * kIn;
-                    WR[dim + 3] = rhoIn * omIn;
+                    WR[dim + 2] = rhoIn * vtIn;
                 } else { // supersonic inlet
                     WR = Arrays.copyOf(WIn, nEqs);
                 }
@@ -297,7 +285,6 @@ public class KOmegaSST extends Aerodynamics {
                     }
                     WR[dim + 1] = pOut / (kapa - 1) + rhoOut * absVelocity2 / 2;
                     WR[dim + 2] = WL[dim + 2];
-                    WR[dim + 3] = WL[dim + 3];
                 } else {  // supersonic outlet
                     WR = Arrays.copyOf(WL, nEqs);
                 }
@@ -337,81 +324,39 @@ public class KOmegaSST extends Aerodynamics {
             pOverRhoDer[d] = (rho * pDer - p * dW[d * nEqs]) / (rho * rho); // rho * rho * p * p !!!!!!!!!!!!!!!!
         }
 
-        // turbulentStress tensor calculation
+        // stress tensor calculation
         double[] stress = new double[dim * dim];
-        //double[] vortic = new double[dim * dim];
         double trace = .0;
         for (int d = 0; d < dim; ++d) {
             trace += velocityJac[dim * d + d];
             for (int f = 0; f < dim; ++f) {
                 stress[dim * d + f] = velocityJac[dim * d + f] + velocityJac[dim * f + d];
-            //    vortic[dim * d + f] = (velocityJac[dim * d + f] - velocityJac[dim * f + d]);
             }
         }
         for (int d = 0; d < dim; ++d) {
             stress[dim * d + d] += lam * trace;
         }
 
-        double k = max(W[dim + 2]/rho,1e-10);
-        double om = W[dim + 3] / rho;
-        
-        // sutherland relation
-        double etaTemp = sutherland(rho, p);
-        
-        double vortic = Math.abs(velocityJac[1]-velocityJac[2]);
-        double walldist = Math.abs(elem.currentWallDistance);  
-        if (walldist < 1e-5){                // zero at wall makes problems - adjust value according to mesh
-            walldist = 1e-5;
-        }
-        double arg2 = max(2*Math.sqrt(k)/(0.09*Math.exp(om)*walldist)/Math.sqrt(Re),500*etaTemp/rho/(walldist*walldist*Math.exp(om))/Re);
-        double F2 = Math.tanh(arg2*arg2);
-        
-        double mut = max(0, rho*a1*k / max(a1*Math.exp(om),vortic*F2));
-
-        double[] turbulentStress = new double[dim * dim];
-        for (int i = 0; i < stress.length; i++) {
-            turbulentStress[i] = stress[i] * mut;
-        }
-        double kMax = 2.0 / 3 * max(0, rho*k);
+        double vt = Math.max(W[dim + 2] / rho, 0);
+        double[] vtDer = new double[dim];
         for (int d = 0; d < dim; ++d) {
-            turbulentStress[dim * d + d] -= kMax;
+            vtDer[d] = 1 / rho * (dW[d * nEqs + dim + 2] - dW[d * nEqs] * vt);
         }
 
-        double[] kDer = new double[dim];
-        double[] omDer = new double[dim];
-        for (int d = 0; d < dim; ++d) {
-            kDer[d] = (dW[d * nEqs + dim + 2] - dW[d * nEqs] * k) / rho;
-            omDer[d] = (dW[d * nEqs + dim + 3] - dW[d * nEqs] * om) / rho;
-        }
+        double xi = rho*vt; // vt/v, becouse v = 1/rho
+        double fv1 = xi * xi * xi / (xi * xi * xi + cv1 * cv1 * cv1);
+        double mut = rho * vt * fv1;
 
-        double constant = kapa / (kapa - 1) * (etaTemp / Pr + mut / Prt);
-        
-        double omkDer = 0;
-        for (int d = 0; d < dim; ++d) {
-            omkDer += omDer[d] * kDer[d];
-        }
-        
-        double CD = max(2*som2*rho*omkDer,1e-10);
-        double arg11 = max(Math.sqrt(k)/(0.09*Math.exp(om)*walldist)/Math.sqrt(Re),500*etaTemp/rho/(Math.exp(om)*walldist*walldist)/Re);
-        double arg12 = 4*rho*som2*k/(CD*walldist*walldist);
-        double arg1 = min(arg11,arg12);   
-        double F1 = Math.tanh(Math.pow(arg1,4));
-        
-        double sk0 = F1*sk1 + (1-F1)*sk2;
-        double som0 = F1*som1 + (1-F1)*som2;
-        //double alpha0 = F1*alpha1 + (1-F1)*alpha2;
-        //double beta0 = F1*beta1 + (1-F1)*beta2;
-
+        double constant = kapa / (kapa - 1) * (1 / Pr + mut / Prt);
         double[] flux = new double[nEqs];
         for (int d = 0; d < dim; ++d) {
             double tmp = .0;
             for (int f = 0; f < dim; ++f) {
-                flux[f + 1] += (etaTemp * stress[dim * d + f] + turbulentStress[dim * d + f]) * n[d] / Re;
-                tmp += velocity[f] * (etaTemp * stress[dim * d + f] + turbulentStress[dim * d + f]);
+                flux[f + 1] += (1 + mut) * stress[dim * d + f] * n[d] / Re;
+                tmp += velocity[f] * (1 + mut) * stress[dim * d + f];
             }
             flux[dim + 1] += (tmp + constant * pOverRhoDer[d]) * n[d] / Re;
-            flux[dim + 2] += (etaTemp + sk0 * mut) / Re * kDer[d] * n[d];
-            flux[dim + 3] += (etaTemp + som0 * mut) / Re * omDer[d] * n[d];
+            flux[dim + 2] += 1 / (Re * sigma) * (1 + rho * vt) * vtDer[d] * n[d];
         }
 
         return flux;
@@ -442,91 +387,68 @@ public class KOmegaSST extends Aerodynamics {
         W[0] = limiteRho(W[0]);
         double rho = W[0];
 
-        double lam = -2. / 3; // Stokesuv vztah
-
         double[] velocity = new double[dim];
         for (int d = 0; d < dim; ++d) {
             velocity[d] = W[d + 1] / rho;
         }
-        
+
         double[] velocityJac = new double[dim * dim];
         for (int d = 0; d < dim; ++d) {
             for (int f = 0; f < dim; ++f) {
                 velocityJac[dim * d + f] = (dW[f * nEqs + d + 1] - dW[f * nEqs] * velocity[d]) / rho;
             }
         }
-        
-        double p = pressure(W);
 
-        double k = max(W[dim + 2]/rho,1e-10);
-        double om = W[dim + 3] / rho;
-        double expOm = Math.exp(om);
-        
-        double etaTemp = sutherland(rho, p);
-        
-        double vortic = Math.abs(velocityJac[1]-velocityJac[2]);
-        double walldist = Math.abs(elem.currentWallDistance);  
-        if (walldist < 1e-5){                // zero at wall makes problems - adjust value according to mesh
-            walldist = 1e-5;
-        }
-        double arg2 = max(2*Math.sqrt(k)/(0.09*Math.exp(om)*walldist)/Math.sqrt(Re),500*etaTemp/rho/(walldist*walldist*Math.exp(om))/Re);
-        double F2 = Math.tanh(arg2*arg2);
-        
-        double mut = max(0, rho*a1*k / max(a1*Math.exp(om),vortic*F2));      
-
-        // turbulentStress tensor calculation
-        double[] turbulentStress = new double[dim * dim];
+        // strain rate tensor calculation
+        double[] strain = new double[dim * dim];
         double trace = .0;
         for (int d = 0; d < dim; ++d) {
             trace += velocityJac[dim * d + d];
             for (int f = 0; f < dim; ++f) {
-                turbulentStress[dim * d + f] = mut * (velocityJac[dim * d + f] + velocityJac[dim * f + d]);
+                strain[dim * d + f] = 0.5*(velocityJac[dim * d + f] + velocityJac[dim * f + d]);
             }
         }
-        double kMax = 2.0 / 3 * max(0, rho*k);
         for (int d = 0; d < dim; ++d) {
-            turbulentStress[dim * d + d] += mut * lam * trace - kMax;
+            strain[dim * d + d] -= trace/3;
         }
 
-        double omkDer = 0;
-        double omDerSqr = 0;
+        // rotation calculation
+        double[] Wrot = new double[dim * dim];
         for (int d = 0; d < dim; ++d) {
-            double kDer = (dW[d * nEqs + dim + 2] - dW[d * nEqs] * k) / rho;
-            double omDer = (dW[d * nEqs + dim + 3] - dW[d * nEqs] * om) / rho;
-            omkDer += omDer * kDer;
-            omDerSqr += omDer * omDer;
-        }
-
-        double Tv = 0;
-        for (int d = 0; d < dim; d++) {
-            for (int f = 0; f < dim; f++) {
-                Tv += turbulentStress[dim * d + f] * velocityJac[dim * d + f];
+            for (int f = 0; f < dim; ++f) {
+                Wrot[dim * d + f] = 0.5*(velocityJac[dim * d + f] - velocityJac[dim * f + d]);
             }
         }
-              
-        double CD = max(2*som2*rho*omkDer,1e-10);
-        double arg11 = max(Math.sqrt(k)/(0.09*Math.exp(om)*walldist)/Math.sqrt(Re),500*etaTemp/rho/(Math.exp(om)*walldist*walldist)/Re);
-        double arg12 = 4*rho*som2*k/(CD*walldist*walldist);
-        double arg1 = min(arg11,arg12);   
-        double F1 = Math.tanh(Math.pow(arg1,4));
         
-        //double sk0 = F1*sk1 + (1-F1)*sk2;
-        double som0 = F1*som1 + (1-F1)*som2;
-        double alpha0 = F1*alpha1 + (1-F1)*alpha2;
-        double beta0 = F1*beta1 + (1-F1)*beta2;
-
-        if (Tv > 10 * betast * rho * k * expOm) {   
-            Tv = 10 * betast * rho * k * expOm;
+        double vt = Math.max(W[dim + 2] / rho, 0);
+        double vtDerSqr = 0;
+        double rhoDerVtDer = 0;
+        for (int d = 0; d < dim; ++d) {
+            double rhoDer = dW[d * nEqs];
+            double vtDer = 1 / rho * (dW[d * nEqs + dim + 2] - dW[d * nEqs] * vt);
+            vtDerSqr += vtDer * vtDer;
+            rhoDerVtDer += rhoDer*vtDer;
         }
 
-        double Tvom = alpha0 * rho / mut /expOm * Tv;   
-        if (Tvom > 10 * beta0 * rho * expOm) {     // moje zmena, opatrne (bylo 100*...)
-            Tvom = 10 * beta0 * rho * expOm;
-        }
+        double D = elem.currentWallDistance;
+        double xi = rho*vt; // vt/v 
+        double ft2 = ct3*Math.exp(-ct4*xi*xi);
+        double fv1 = xi * xi * xi / (xi * xi * xi + cv1 * cv1 * cv1);
+        double fv2 = 1 - xi / (1 + xi * fv1);
+        double Om = matrixMagnitude(Wrot);
+        double Smag = matrixMagnitude(strain);
+        double S = Om + C_prod * Math.min(0, Smag - Om) + 1 / Re * vt / (ka * ka * D * D) * fv2;
+        //double S = Om + 1 / Re * vt / (ka * ka * D * D) * fv2;
+        double rt = Math.min(vt / (Re * S * ka * ka * D * D), 10);
+
+        double g = rt + cw2 * (Math.pow(rt, 6.0) - rt);
+        double fw = g * Math.pow((1 + Math.pow(cw3, 6.0)) / (Math.pow(g, 6.0) + Math.pow(cw3, 6.0)), 1.0 / 6);
 
         double[] source = new double[nEqs];
-        source[dim + 2] = max(Tv - betast * rho * k * expOm, 0);  
-        source[dim + 3] = max(Tvom - beta0 * rho * expOm + 1 / Re * som2*rho/expOm *omkDer *2*(1-F1) + 1 / Re * (etaTemp + som0 * mut) * omDerSqr, 0);
+        source[dim + 2] = cb1 * (1 - ft2) * rho * S * vt;
+        source[dim + 2] -= 1 / Re * rho * (cw1 * fw - cb1 / (ka * ka) * ft2) * (vt / D) * (vt / D);
+        source[dim + 2] += 1 / Re * rho * cb2 * vtDerSqr;
+        source[dim + 2] -= 1 / (Re * sigma) * (1 / rho + vt) * rhoDerVtDer;
         return source;
     }
 
@@ -542,25 +464,15 @@ public class KOmegaSST extends Aerodynamics {
 
             case "energy":
                 return new double[]{pRef * W[dim + 1]};
-
-            case "k":
-                return new double[]{W[dim + 2] / W[0]};
-
-            case "omega":
-                return new double[]{Math.exp(W[dim + 3] / W[0])};
-
-            case "turbulentviscosity":
-                return new double[]{W[dim + 2] / Math.exp(W[dim + 3] / W[0])};
-
+                        
+            case "mut":
+                double xi = max(W[dim + 2],0); // vt/v
+                double fv1 = xi * xi * xi / (xi * xi * xi + cv1 * cv1 * cv1);
+                return new double[]{W[0]*W[dim + 2]*fv1};
+                
             default:
                 return super.getResults(W, dW, X, name);
         }
-    }
-
-    public double sutherland(double rho, double p) {
-        double T = p / rho;
-        double TRef = 1/ (cv*(kapa - 1)) * pRef / rhoRef;
-        return Math.pow(T,1.5)*(1+Suth/TRef)/(T + Suth/TRef);
     }
 
     public double max(double a, double b) {
@@ -570,13 +482,60 @@ public class KOmegaSST extends Aerodynamics {
             return b;
         }
     }
-    public double min(double a, double b) {
-        if (a < b) {
-            return a;
-        } else {
-            return b;
-        }
-    }
-}
 
+    public double matrixMagnitude(double[] A) {
+        double mag = 0;
+        for (int i = 0; i < A.length; i++) {
+            mag += 2 * A[i] * A[i];
+        }
+        return Math.sqrt(mag);
+    }
+
+    
+    @Override
+	public double[] stressVector(double[] W, double[] dW, double[] normal) {
+		if (isDiffusive) {		
+			double rho = W[0];
+
+			double[] velocity = new double[dim];
+			for (int d = 0; d < dim; ++d) {
+				velocity[d] = W[d + 1] / rho;
+			}
+
+			double[] velocityJac = new double[dim * dim];
+			for (int d = 0; d < dim; ++d) {
+				for (int f = 0; f < dim; ++f) {
+					velocityJac[dim * d + f] = (dW[f * nEqs + d + 1] - dW[f * nEqs] * velocity[d]) / rho;
+				}
+			}
+
+			double[] stress = new double[dim * dim];
+			double trace = .0;
+			for (int d = 0; d < dim; ++d) {
+				trace += velocityJac[dim * d + d];
+				for (int f = 0; f < dim; ++f) {
+					stress[dim * d + f] = velocityJac[dim * d + f] + velocityJac[dim * f + d];
+				}
+			}
+			double lam = -2. / 3; // Stokesuv vztah
+			for (int d = 0; d < dim; ++d) {
+				stress[dim * d + d] += lam * trace;
+			}
+
+			double p = pressure(W);
+
+			double[] normalStress = new double[dim];
+			for (int d = 0; d < dim; ++d) {
+				normalStress[d] -= p * normal[d];
+				for (int f = 0; f < dim; ++f) {
+					normalStress[d] += 1 / Re * stress[dim * d + f] * normal[f];
+				}
+			}
+
+			return normalStress;
+		} else {
+			return super.stressVector(W, dW, normal);
+		}
+	}
+}
 

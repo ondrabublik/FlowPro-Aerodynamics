@@ -7,6 +7,7 @@ import java.util.Arrays;
 
 public class NavierStokesVelocityInlet extends NavierStokes {
 	
+//<<<<<<< HEAD
 	protected double height = 0.41;
 	
 	protected enum InletType {
@@ -93,7 +94,7 @@ public class NavierStokesVelocityInlet extends NavierStokes {
                 }
                 
                 pOut = props.getDouble("pOut") / pRef;
-            } else if (velocityInletBC) {
+            } else if (velocityInletBC) {				
 				if (props.containsKey("inletType")) {
 					String type = props.getString("inletType");
 					if (InletType.VELOCITY.name().toLowerCase().equals(type)) {
@@ -140,6 +141,17 @@ public class NavierStokesVelocityInlet extends NavierStokes {
         // other reference values
         if (props.containsKey("lRef")) {
             lRef = props.getDouble("lRef");
+//=======
+//	double vInlet;
+//	
+//	@Override
+//	public void init(FlowProProperties props) throws IOException {
+//        super.init(props);
+//        
+//        // acceleration
+//        if(props.containsKey("vInlet")){
+//            vInlet = props.getDouble("vInlet");
+//>>>>>>> 999c0327c8c523126197d574d7620db004b66e69
         } else {
             lRef = 1;
         }
@@ -159,9 +171,9 @@ public class NavierStokesVelocityInlet extends NavierStokes {
                     if (attackAngle.length != (dim - 1)) {
                         throw new IOException("variable " + var + " must be a vector of " + (dim - 1)
                                 + " (= dimension - 1) entries");
-                    }
+    }
                     break;
-
+	
                 default:
                     throw new IOException("only 1, 2 or 3 dimensions are supported");
             }
@@ -265,6 +277,7 @@ public class NavierStokesVelocityInlet extends NavierStokes {
 				double[] WR = new double[nEqs];
 				
 				if (!isInletSupersonic) { // subsonic inlet
+//<<<<<<< HEAD
 					double p = pressure(WL);
 					double y = elem.currentX[1];
 					
@@ -279,6 +292,11 @@ public class NavierStokesVelocityInlet extends NavierStokes {
 					}
 					double rhoIn = 1;
 					
+//=======
+//					double p = pressure(WL);				
+//					double inletVelocity = vInlet/velocityRef; 
+//					double rhoIn = 1;				               
+//>>>>>>> 999c0327c8c523126197d574d7620db004b66e69
                     double E = p / (kapa - 1) + 0.5 * rhoIn * inletVelocity * inletVelocity;
 
                     WR[0] = rhoIn;
@@ -309,53 +327,12 @@ public class NavierStokesVelocityInlet extends NavierStokes {
 		}          
     }
 	
-//	@Override
-//    public double[] boundaryValue(double[] WL, double[] n, int TT, ElementData elem) {
-//		
-//		switch (TT) {
-//			case BoundaryType.INLET:
-//				WL[0] = limiteRho(WL[0]);
-//				double[] WR = new double[nEqs];
-//				
-//				if (!isInletSupersonic) { // subsonic inlet
-//					double p = pressure(WL);
-//					double inletVelocity = 1;
-//					double rhoIn = 1;				               
-//                    double E = p / (kapa - 1) + 0.5 * rhoIn * inletVelocity * inletVelocity;
-//
-//                    WR[0] = rhoIn;
-//                    if (attackAngle == null) {
-//                        for (int d = 0; d < dim; ++d) {
-//                            WR[d + 1] = -rhoIn * inletVelocity * n[d];
-//                        }
-//                    } else {
-//                        double[] dir;
-//                        if (dim == 2) {
-//                            dir = new double[]{Math.cos(attackAngle[0]), Math.sin(attackAngle[0])};
-//                        } else {
-//                            dir = new double[]{Math.cos(attackAngle[0]) * Math.cos(attackAngle[1]), Math.sin(attackAngle[0]) * Math.cos(attackAngle[1]), Math.sin(attackAngle[1])};
-//                        }
-//                        for (int d = 0; d < dim; ++d) {
-//                            WR[d + 1] = rhoIn * inletVelocity * dir[d];
-//                        }
-//                    }
-//                    WR[dim + 1] = E;
-//                } else { // supersonic inlet
-//                    WR = Arrays.copyOf(WIn, nEqs);
-//                }
-//				
-//				return WR;
-//			
-//			default:
-//				return super.boundaryValue(WL, n, TT, elem);
-//		}          
-//    }
-	
-	 @Override
+	@Override
     public double[] constInitCondition() {		
         if (isInletSupersonic) {
             return WIn;
         } else {
+//<<<<<<< HEAD
 			double p = pOut;			
 			double inletVelocity = 1;
 			double rhoIn = 1;
@@ -364,6 +341,11 @@ public class NavierStokesVelocityInlet extends NavierStokes {
 				inletVelocity = 0;
 			}
 			
+//=======
+//			double p = pOut;
+//			double inletVelocity = vInlet/velocityRef;
+//			double rhoIn = 1;				               
+//>>>>>>> 999c0327c8c523126197d574d7620db004b66e69
 			double E = p / (kapa - 1) + 0.5 * rhoIn * inletVelocity * inletVelocity;
 			
             double[] vIn = new double[dim];

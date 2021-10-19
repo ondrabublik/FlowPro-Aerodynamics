@@ -15,15 +15,15 @@ import java.util.Arrays;
  */
 public class SpalartAllmarasVelocityInlet extends SpalartAllmaras{
     
-    double Vinlet;
+    double vInlet;
     
     @Override
     public void init(FlowProProperties props) throws IOException {
         super.init(props);
         
         // acceleration
-        if(props.containsKey("Vinlet")){
-            Vinlet = props.getDouble("Vinlet");
+        if(props.containsKey("vIn")){
+            vInlet = props.getDouble("vIn");
         } else {
             throw new IOException("Velocity in inlet must be defined!");
         }
@@ -72,7 +72,7 @@ public class SpalartAllmarasVelocityInlet extends SpalartAllmaras{
                         mach = Math.sqrt((2 / (kapa - 1)) * (-1 + Math.pow(pIn0 / p, (kapa - 1) / kapa)));
                     }
                     double rhoIn = rhoIn0 * Math.pow((1 + ((kapa - 1) / 2) * mach * mach), 1 / (1 - kapa));
-                    double normalVelocity = Vinlet/velocityRef; //mach * Math.sqrt((kapa * p) / rhoIn);
+                    double normalVelocity = vInlet/velocityRef; //mach * Math.sqrt((kapa * p) / rhoIn);
                     double E = p / (kapa - 1) + 0.5 * rhoIn * normalVelocity * normalVelocity;
 
                     WR[0] = rhoIn;
